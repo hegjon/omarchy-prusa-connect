@@ -204,9 +204,14 @@ It suppresses two warning classes that are not defects: `missing-property` on
 else, particularly `[unqualified]`, is a real finding.
 
 `test/fixtures/printers.json` is a real Connect response with identifying
-details replaced. `test/fixtures/printing.json` is synthetic: the job field
-names it uses have not yet been confirmed against a live printing printer, and
-`normalize.jq` deliberately accepts several spellings until they are.
+details replaced, as is `test/fixtures/printing.json`, captured from a printer
+mid-job.
+
+Two things that fixture pins down, both of which would be easy to get wrong:
+`job_info.progress` is a **percentage**, not a fraction — the capture reads
+`1.0` while `weight_remaining` is still 99% of `model_weight` — and Connect
+signals "no time estimate yet" with both `0` and `-1`, the same job reporting
+`0` at 117 seconds in and `-1` at 228. Neither may reach the panel as an ETA.
 
 Printer illustrations are refreshed with:
 

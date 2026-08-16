@@ -133,15 +133,44 @@ else
   (( failed++ ))
 fi
 
-# --- synthetic printing job -------------------------------------------------
+# --- captured printing job ---------------------------------------------------
+echo
+echo "printing"
 check "counts a printing printer" printing.json \
   '.summary.printing == 1'
-check "reads job name and progress" printing.json \
-  '.printers[0].job.name == "benchy.bgcode" and .printers[0].job.progress == 42.5'
-check "reads remaining time" printing.json \
-  '.printers[0].job.remaining == 4320'
-check "reads nozzle target while heating" printing.json \
-  '.printers[0].temps.nozzleTarget == 215.0'
+check "reads the job name Connect reports" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .job.name == "Shape-Cylinder_0.4n_0.2mm_PETG_MK4IS_45s.bgcode")'
+# progress is a percentage, not a fraction: the capture reads 1.0 while
+# weight_remaining is still 99% of model_weight. Scaling would be wrong by 100x.
+check "passes progress through as a percentage" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .job.progress == 1.0)'
+check "reads elapsed print time" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .job.elapsed == 117)'
+# Connect says 0 when the printer has no estimate yet, which must not render as
+# "ETA 0s" — that would claim a job two minutes old is about to finish.
+check "treats a zero time estimate as unknown" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .job.remaining == null)'
+# The same job reported 0 at 117 seconds in and -1 at 228: both mean "no
+# estimate yet", so both must normalize away rather than reaching the panel.
+if jq -f "$NORMALIZE" <<<'{"printers":[{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":1.0,"time_remaining":-1,"time_printing":228}}]}' |
+   jq -e '.printers[0].job.remaining == null' >/dev/null 2>&1; then
+  printf '  ok    treats a negative time estimate as unknown\n'
+  passed=$(( passed + 1 ))
+else
+  printf '  FAIL  treats a negative time estimate as unknown\n'
+  failed=$(( failed + 1 ))
+fi
+# Zero is the only value treated as unknown; a real estimate must survive.
+if jq -f "$NORMALIZE" <<<'{"printers":[{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":42.5,"time_remaining":4320,"time_printing":1800}}]}' |
+   jq -e '.printers[0].job.remaining == 4320 and .printers[0].job.progress == 42.5' >/dev/null 2>&1; then
+  printf '  ok    a non-zero remaining time survives\n'
+  passed=$(( passed + 1 ))
+else
+  printf '  FAIL  a non-zero remaining time survives\n'
+  failed=$(( failed + 1 ))
+fi
+check "reads targets while heating" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .temps.nozzleTarget == 175.0 and .temps.bedTarget == 85.0)'
 
 # --- degenerate input -------------------------------------------------------
 echo

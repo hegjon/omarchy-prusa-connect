@@ -35,8 +35,13 @@ def tools_of:
     })
   | sort_by(.index | tostring);
 
-# No sample of a printing printer has been captured yet, so accept the key names
-# Connect is known to use across its APIs rather than committing to one guess.
+# Field names confirmed against a live printing MK4 on 2026-08-16; see
+# test/fixtures/printing.json. The alternative spellings are kept because they
+# cost nothing and Connect's APIs are not documented.
+#
+# progress is a PERCENTAGE, not a fraction: the captured sample reads 1.0 while
+# weight_remaining is still 99% of model_weight. Passing it through unscaled is
+# therefore correct, and scaling it by 100 would be wrong by 100x.
 def job_of:
   (.job_info // .job // null)
   | if . == null or (type != "object") then null
@@ -48,6 +53,12 @@ def job_of:
         remaining: as_number(.time_remaining? // .remaining_time? // .estimated_time_remaining?),
         elapsed: as_number(.time_printing? // .print_time? // .elapsed?)
       }
+      # Connect has no estimate until the printer works one out, and signals that
+      # with both 0 and -1 — the same job reported 0 at 117 seconds in and -1 at
+      # 228. Rendering either as an ETA would be a lie ("ETA 0s" claims the job
+      # is about to finish), so anything non-positive is unknown and the panel
+      # omits the ETA. A print genuinely at zero flips to FINISHED within a poll.
+      | if (.remaining != null and .remaining <= 0) then .remaining = null else . end
       | if (.id == null and .name == null and .progress == null) then null else . end
     end;
 

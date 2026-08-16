@@ -1,24 +1,35 @@
 {
-  "_comment": "Synthetic. No sample of a PRINTING printer has been captured from Prusa Connect yet, so the job_info key names here are the ones normalize.jq accepts, not names confirmed against the live API. Replace this file with a real capture when a print is running.",
+  "_comment": "A real Prusa Connect response captured from a printer mid-job on 2026-08-16, with identifying details replaced. Confirms the job_info field names: display_name, progress, time_remaining, time_printing. progress is a PERCENTAGE (0-100), not a fraction — this capture reads 1.0 while weight_remaining is still 99% of model_weight. time_remaining is 0 because the printer had not computed an estimate 117 seconds in, not because the print was about to finish.",
   "printers": [
     {
       "printer_model": "MK4IS",
       "printer_state": "PRINTING",
       "connect_state": "PRINTING",
-      "last_online": 1786862284.0,
-      "temp": { "temp_nozzle": 215.0, "temp_bed": 60.0, "target_nozzle": 215.0, "target_bed": 60.0 },
-      "axis_z": 4.2,
+      "last_online": 1786872477.0,
+      "temp": { "temp_nozzle": 175.0, "temp_bed": 68.6, "target_nozzle": 175.0, "target_bed": 85.0 },
+      "axis_z": 40.0,
       "speed": 100,
       "nozzle_diameter": 0.4,
       "job_info": {
-        "id": 4711,
-        "display_name": "benchy.bgcode",
-        "progress": 42.5,
-        "time_remaining": 4320,
-        "time_printing": 1800
+        "origin_id": 1,
+        "id": 85,
+        "path": "/usb/SHAPE-~1.BGC",
+        "hash": "0000000000000000000000000000",
+        "start": 1786872360,
+        "progress": 1.0,
+        "preview_url": "/app/teams/1/files/0000000000000000000000000000/preview",
+        "state": "PRINTING",
+        "model_weight": 0.21,
+        "weight_remaining": 0.2079,
+        "print_height": 40,
+        "total_height": 0.2,
+        "display_name": "Shape-Cylinder_0.4n_0.2mm_PETG_MK4IS_45s.bgcode",
+        "lifetime_id": "00000000-0000-4000-8000-00000000000f",
+        "time_remaining": 0,
+        "time_printing": 117
       },
       "tools": {
-        "1": { "temp": 215.0, "fan_hotend": 100.0, "fan_print": 80.0, "nozzle_diameter": 0.4, "material": "PLA", "high_flow": false, "hardened": false }
+        "1": { "temp": 175.0, "active": true, "nozzle_diameter": 0.4, "material": "PETG", "high_flow": false, "hardened": false }
       },
       "uuid": "00000000-0000-4000-8000-000000000004",
       "name": "Busy MK4",
@@ -27,7 +38,7 @@
       "team_id": 1,
       "team_name": "Team One",
       "firmware": "6.5.7+12836",
-      "filament": { "material": "PLA" },
+      "filament": { "material": "PETG" },
       "rights_r": true,
       "rights_w": true,
       "rights_u": true
