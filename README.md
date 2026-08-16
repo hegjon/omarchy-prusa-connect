@@ -102,7 +102,7 @@ Settings appear in the Omarchy bar widget settings.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| Show a fleet summary next to the bar icon | enabled | Progress or state counts beside the icon |
+| Show print progress on the bar icon | enabled | Replaces the icon with a percentage while one printer is running |
 | Hide idle and offline printers | disabled | Show only printers doing something |
 | Refresh interval while the panel is open | `30` s | From 10 to 300 |
 | Keep polling in the background | enabled | Needed for the bar summary and notifications |
@@ -113,8 +113,23 @@ Settings appear in the Omarchy bar widget settings.
 | Re-notify cooldown | `10` min | Minimum gap before the same printer notifies again |
 | Celsius | enabled | Off shows Fahrenheit |
 
-Notifications fire on a state *transition*, so a printer sitting in ATTENTION
-across many polls notifies once rather than every poll.
+Notifications fire on a *transition*, so a printer sitting in ATTENTION across
+many polls notifies once rather than every poll. Nothing is announced on the
+first poll after the shell starts — the widget waking up is not an event.
+
+### What counts as needing attention
+
+A printer wants a human when it reports `ATTENTION` or `ERROR`, **or** when it
+has an unanswered dialog on its screen — a printer can sit in `FINISHED` with a
+dialog waiting, which is easy to miss. Either lights a count badge on the bar
+icon and raises a notification.
+
+A dialog on a printer Connect cannot currently reach does not count. That dialog
+is as stale as the printer state next to it, and badging the bar over something
+last seen months ago is noise.
+
+The rule lives in one place, `needsAttention` in `normalize.jq`, so the badge,
+the summary count and the notification cannot drift apart.
 
 ## Panel
 

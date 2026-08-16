@@ -43,8 +43,8 @@ check "counts both disconnected printers as offline" printers.json \
 # unreachable for months; liveness has to win or the panel lies.
 check "stale ATTENTION on a disconnected printer reads as OFFLINE" printers.json \
   '.printers[0].state == "OFFLINE" and .printers[0].printerState == "ATTENTION"'
-check "a disconnected printer is not counted as needing attention" printers.json \
-  '.summary.attention == 0'
+check "a disconnected printer's stale ATTENTION does not count" printers.json \
+  '.printers[0].needsAttention == false'
 
 # Fields Connect omits entirely for a disconnected printer.
 check "missing temps normalize to null rather than erroring" printers.json \
@@ -63,6 +63,27 @@ check "surfaces the pending dialog as the attention reason" printers.json \
   '.printers[1].attention.title == "DISPLAY PROBLEM DETECTED"'
 check "a printer with no dialog has no attention reason" printers.json \
   '.printers[0].attention == null'
+
+# An unanswered dialog means a printer wants a human even when its state does
+# not say so — the XL reports FINISHED with a dialog still on screen.
+check "a reachable printer with a dialog needs attention" printers.json \
+  '.printers[1].needsAttention == true'
+check "the fleet summary counts it" printers.json \
+  '.summary.attention == 1'
+
+# --- needsAttention boundaries ----------------------------------------------
+echo
+echo "needsAttention"
+check "FINISHED with an unanswered dialog needs attention" attention.json \
+  '.printers[0].needsAttention == true'
+check "a stale dialog on an unreachable printer does not" attention.json \
+  '.printers[1].needsAttention == false'
+check "ATTENTION without a dialog still needs attention" attention.json \
+  '.printers[2].needsAttention == true'
+check "an idle printer does not" attention.json \
+  '.printers[3].needsAttention == false'
+check "the summary counts exactly the two that qualify" attention.json \
+  '.summary.attention == 2'
 
 # --- synthetic printing job -------------------------------------------------
 check "counts a printing printer" printing.json \

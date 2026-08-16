@@ -28,8 +28,9 @@ Panel {
   property bool refreshing: false
   property real lastUpdatedAt: 0
 
-  // Notification bookkeeping, keyed by printer uuid.
-  property var lastStateById: ({})
+  // Notification bookkeeping, keyed by printer uuid: what each printer looked
+  // like last poll, so only genuine transitions announce themselves.
+  property var lastSeenById: ({})
   property var notifiedAt: ({})
 
   // --- settings ---------------------------------------------------------
@@ -128,6 +129,10 @@ Panel {
     })
   }
 
+  // BarIconButton is a fixed one-slot glyph holder — it pins its width to
+  // slotSize and hides its label — so anything wider than a glyph paints over
+  // the neighbouring widgets. Counts belong in the badge overlay below; this
+  // stays short enough to sit inside the slot.
   readonly property string barSummary: {
     if (!showBarSummary || !initialized) return ""
     if (fleet.printing > 0) {
@@ -136,9 +141,7 @@ Panel {
       // than a count that says less.
       if (printing.length === 1 && printing[0].job && printing[0].job.progress !== null)
         return Math.round(printing[0].job.progress) + "%"
-      return fleet.printing + " printing"
     }
-    if (fleet.attention > 0) return fleet.attention + " attention"
     return ""
   }
 
@@ -192,37 +195,48 @@ Panel {
 
   // --- notifications ----------------------------------------------------
 
-  function notificationFor(printer, previousState) {
-    // Only a transition is worth announcing; a printer sitting in ATTENTION
-    // across a dozen polls should notify once, not a dozen times.
-    if (previousState === undefined || previousState === printer.state) return null
+  // Only a transition is worth announcing; a printer sitting in ATTENTION across
+  // a dozen polls should notify once, not a dozen times. `previous` is undefined
+  // on the first poll of a session, which deliberately announces nothing — the
+  // widget starting up is not an event.
+  function notificationFor(printer, previous) {
+    if (previous === undefined) return null
 
-    if (printer.state === "FINISHED" && notifyFinished)
-      return { urgency: "normal", body: "Print finished" }
+    var stateChanged = printer.state !== previous.state
 
-    if (printer.state === "ERROR" && notifyError)
+    if (stateChanged && printer.state === "ERROR" && notifyError)
       return { urgency: "critical", body: "Printer error" }
 
-    if (printer.state === "ATTENTION" && notifyAttention) {
+    // Attention keys on needsAttention, the same predicate the bar badge uses,
+    // so an unanswered dialog notifies even when the state never changes. It is
+    // checked before FINISHED: if a print completes and leaves a dialog on the
+    // screen in the same poll, the dialog is the more actionable of the two.
+    if (notifyAttention && printer.needsAttention && !previous.needsAttention) {
       var detail = printer.attention && printer.attention.title
         ? printer.attention.title : "Needs attention"
       return { urgency: "critical", body: detail }
     }
 
+    if (stateChanged && printer.state === "FINISHED" && notifyFinished)
+      return { urgency: "normal", body: "Print finished" }
+
     return null
   }
 
   function evaluateNotifications() {
-    var states = {}
+    var seen = {}
     var stamps = notifiedAt
     var now = Date.now()
 
     for (var i = 0; i < printers.length; i++) {
       var printer = printers[i]
       if (!printer.uuid) continue
-      states[printer.uuid] = printer.state
+      seen[printer.uuid] = {
+        state: printer.state,
+        needsAttention: printer.needsAttention === true
+      }
 
-      var notification = notificationFor(printer, lastStateById[printer.uuid])
+      var notification = notificationFor(printer, lastSeenById[printer.uuid])
       if (!notification) continue
 
       var last = stamps[printer.uuid] || 0
@@ -232,7 +246,7 @@ Panel {
       notify(printer.name, notification.body, notification.urgency)
     }
 
-    lastStateById = states
+    lastSeenById = seen
     notifiedAt = stamps
   }
 
@@ -298,14 +312,39 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.barSummary !== ""
-      ? root.printerGlyph + "  " + root.barSummary
-      : root.printerGlyph
+    text: root.barSummary !== "" ? root.barSummary : root.printerGlyph
     dimmed: root.needsLogin || root.lastError !== ""
     active: root.fleet.attention > 0 || root.lastError !== ""
     activeColor: Color.urgent
     tooltipText: root.tooltipSummary
     slotSize: Style.bar.statusSlot
+
+    // Count of printers wanting a human, drawn in the slot corner so the bar
+    // width never changes. Same idiom as the first-party widgets.
+    Rectangle {
+      id: attentionBadge
+      visible: root.fleet.attention > 0 && root.lastError === ""
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.horizontalCenterOffset: button.opticalSize / 2 - Style.space(1)
+      anchors.verticalCenterOffset: -(button.opticalSize / 2 - Style.space(2))
+      height: badgeLabel.implicitHeight + Style.spaceReal(1)
+      width: Math.max(height, badgeLabel.implicitWidth + Style.spaceReal(3))
+      radius: height / 2
+      color: Color.urgent
+      border.width: 1
+      border.color: Color.bar.background
+
+      Text {
+        id: badgeLabel
+        anchors.centerIn: parent
+        text: String(root.fleet.attention)
+        color: Color.bar.background
+        font.family: Style.font.family
+        font.pixelSize: Math.max(7, Math.round(Style.font.caption * 0.78))
+        font.bold: true
+      }
+    }
 
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.MiddleButton) root.refresh()

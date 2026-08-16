@@ -86,7 +86,18 @@ def printer_of:
     tools: tools_of,
     job: job_of,
     attention: attention_of
-  };
+  }
+  # A printer wanting a human is not always in the ATTENTION state: a dialog can
+  # sit unanswered on the screen while the printer reports FINISHED. Defined once
+  # here so the summary count, the bar badge and the notification rule cannot
+  # drift apart.
+  #
+  # Only while reachable, though. An unreachable printer's dialog is as stale as
+  # its printer_state, and badging the bar over something last seen in February
+  # would be noise.
+  | . + { needsAttention: (
+      .state == "ATTENTION" or .state == "ERROR" or (.online and .attention != null)
+    ) };
 
 (.printers // []) | map(printer_of) as $printers
 | {
@@ -95,7 +106,7 @@ def printer_of:
       total: ($printers | length),
       online: ([$printers[] | select(.online)] | length),
       printing: ([$printers[] | select(.state == "PRINTING")] | length),
-      attention: ([$printers[] | select(.state == "ATTENTION" or .state == "ERROR")] | length),
+      attention: ([$printers[] | select(.needsAttention)] | length),
       finished: ([$printers[] | select(.state == "FINISHED")] | length),
       offline: ([$printers[] | select(.online | not)] | length)
     }

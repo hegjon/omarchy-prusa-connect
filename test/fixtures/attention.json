@@ -1,0 +1,55 @@
+{
+  "_comment": "Boundary cases for the needsAttention rule. The first printer is the real situation that motivated it: reachable, reporting FINISHED, with an unanswered dialog on its screen.",
+  "printers": [
+    {
+      "printer_state": "FINISHED",
+      "connect_state": "FINISHED",
+      "last_online": 1786862284.0,
+      "dialog_info": {
+        "id": 3586002496,
+        "code": "17324",
+        "title": "DISPLAY PROBLEM DETECTED",
+        "text": "Display issues detected. Reducing the refresh rate will possibly solve the problem. Proceed?",
+        "buttons": ["Yes", "No"],
+        "key": "DISPLAY_PROBLEM_DETECTED"
+      },
+      "temp": { "temp_nozzle": 19.0, "temp_bed": 18.3, "target_nozzle": 0.0, "target_bed": 0.0 },
+      "uuid": "00000000-0000-4000-8000-00000000000a",
+      "name": "Finished with dialog",
+      "printer_type_name": "Original Prusa XL"
+    },
+    {
+      "printer_state": "ATTENTION",
+      "connect_state": "OFFLINE",
+      "last_online": 1740135076.0,
+      "dialog_info": {
+        "id": 1,
+        "code": "00001",
+        "title": "STALE DIALOG",
+        "text": "Left over from the last time this printer was reachable.",
+        "buttons": ["Ok"],
+        "key": "STALE"
+      },
+      "uuid": "00000000-0000-4000-8000-00000000000b",
+      "name": "Offline with stale dialog",
+      "printer_type_name": "Original Prusa MK4"
+    },
+    {
+      "printer_state": "ATTENTION",
+      "connect_state": "ATTENTION",
+      "last_online": 1786862284.0,
+      "uuid": "00000000-0000-4000-8000-00000000000c",
+      "name": "Attention without dialog",
+      "printer_type_name": "Original Prusa MK4"
+    },
+    {
+      "printer_state": "IDLE",
+      "connect_state": "IDLE",
+      "last_online": 1786862284.0,
+      "uuid": "00000000-0000-4000-8000-00000000000d",
+      "name": "Quietly idle",
+      "printer_type_name": "Original Prusa MINI"
+    }
+  ],
+  "pager": { "limit": 20, "offset": 0, "total": 4 }
+}
