@@ -147,11 +147,22 @@ therefore sends an explicit `User-Agent`.
 ## Development
 
 ```bash
-./test/test-normalize
+./test/test-normalize    # response normalization, against fixtures
+./test/lint              # qmllint over the QML
 ```
 
-Runs the response-normalization suite against captured and synthetic fixtures.
-No credentials and no network access are involved.
+Neither involves credentials or network access.
+
+`qmllint` ships with `qt6-declarative`, which Quickshell already depends on, but
+it lives in Qt's versioned bin directory (`/usr/lib/qt6/bin/qmllint`) rather than
+on `PATH`. `test/lint` finds it either way and builds the import root that
+Quickshell provides at runtime for the `qs.*` modules.
+
+It suppresses two warning classes that are not defects: `missing-property` on
+`Style.*` / `Color.*`, whose nested `QtObject` groups qmllint cannot introspect
+(first-party plugins report the same — `weather/BarWidget.qml` alone produces
+15), and the `QProcess::ExitStatus` signal parameter on `onExited`. Anything
+else, particularly `[unqualified]`, is a real finding.
 
 `test/fixtures/printers.json` is a real Connect response with identifying
 details replaced. `test/fixtures/printing.json` is synthetic: the job field

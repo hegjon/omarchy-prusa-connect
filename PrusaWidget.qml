@@ -1,5 +1,6 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
-import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -409,6 +410,8 @@ Panel {
           model: root.visiblePrinters
 
           Column {
+            id: printerEntry
+
             required property var modelData
 
             width: column.width
@@ -422,7 +425,7 @@ Panel {
               Text {
                 width: parent.width - stateText.implicitWidth - Style.space(8)
                 elide: Text.ElideRight
-                text: modelData.name
+                text: printerEntry.modelData.name
                 color: Color.popups.text
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
@@ -431,10 +434,10 @@ Panel {
 
               Text {
                 id: stateText
-                text: root.stateLabel(modelData.state)
-                  + (modelData.job && modelData.job.progress !== null
-                     ? "  " + Math.round(modelData.job.progress) + "%" : "")
-                color: root.stateColor(modelData.state)
+                text: root.stateLabel(printerEntry.modelData.state)
+                  + (printerEntry.modelData.job && printerEntry.modelData.job.progress !== null
+                     ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
+                color: root.stateColor(printerEntry.modelData.state)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
               }
@@ -444,12 +447,12 @@ Panel {
             Text {
               width: parent.width
               elide: Text.ElideRight
-              visible: modelData.job !== null && modelData.job !== undefined
+              visible: printerEntry.modelData.job !== null && printerEntry.modelData.job !== undefined
               text: {
-                if (!modelData.job) return ""
+                if (!printerEntry.modelData.job) return ""
                 var parts = []
-                if (modelData.job.name) parts.push(modelData.job.name)
-                var remaining = root.formatDuration(modelData.job.remaining)
+                if (printerEntry.modelData.job.name) parts.push(printerEntry.modelData.job.name)
+                var remaining = root.formatDuration(printerEntry.modelData.job.remaining)
                 if (remaining !== "") parts.push("ETA " + remaining)
                 return parts.join("  ·  ")
               }
@@ -462,9 +465,9 @@ Panel {
             Text {
               width: parent.width
               wrapMode: Text.WordWrap
-              visible: modelData.attention !== null && modelData.attention !== undefined
-              text: modelData.attention
-                ? (modelData.attention.title || modelData.attention.text || "")
+              visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
+              text: printerEntry.modelData.attention
+                ? (printerEntry.modelData.attention.title || printerEntry.modelData.attention.text || "")
                 : ""
               color: Color.urgent
               font.family: Style.font.family
@@ -476,25 +479,25 @@ Panel {
               width: parent.width
               elide: Text.ElideRight
               text: {
-                if (!modelData.online)
-                  return modelData.model + "  ·  last seen " + root.formatAgo(modelData.lastOnline)
+                if (!printerEntry.modelData.online)
+                  return printerEntry.modelData.model + "  ·  last seen " + root.formatAgo(printerEntry.modelData.lastOnline)
 
                 var bits = []
-                if (modelData.temps) {
-                  var nozzle = root.formatTemp(modelData.temps.nozzle)
-                  if (modelData.temps.nozzleTarget > 0)
-                    nozzle += "/" + root.formatTemp(modelData.temps.nozzleTarget)
-                  var bed = root.formatTemp(modelData.temps.bed)
-                  if (modelData.temps.bedTarget > 0)
-                    bed += "/" + root.formatTemp(modelData.temps.bedTarget)
+                if (printerEntry.modelData.temps) {
+                  var nozzle = root.formatTemp(printerEntry.modelData.temps.nozzle)
+                  if (printerEntry.modelData.temps.nozzleTarget > 0)
+                    nozzle += "/" + root.formatTemp(printerEntry.modelData.temps.nozzleTarget)
+                  var bed = root.formatTemp(printerEntry.modelData.temps.bed)
+                  if (printerEntry.modelData.temps.bedTarget > 0)
+                    bed += "/" + root.formatTemp(printerEntry.modelData.temps.bedTarget)
                   bits.push("N " + nozzle)
                   bits.push("B " + bed)
                 }
                 // Only worth naming tools when there is more than one.
-                if (modelData.tools && modelData.tools.length > 1)
-                  bits.push(modelData.tools.length + " tools")
-                else if (modelData.material)
-                  bits.push(modelData.material)
+                if (printerEntry.modelData.tools && printerEntry.modelData.tools.length > 1)
+                  bits.push(printerEntry.modelData.tools.length + " tools")
+                else if (printerEntry.modelData.material)
+                  bits.push(printerEntry.modelData.material)
                 return bits.join("   ")
               }
               color: Color.muted
