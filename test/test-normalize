@@ -89,6 +89,50 @@ check "an idle printer does not" attention.json \
 check "the summary counts exactly the two that qualify" attention.json \
   '.summary.attention == 2'
 
+# Once anything has been extruded it is no longer preparing, and a printer that
+# is not printing at all never is.
+# A printer cooling down after a finished job can still report PRINTING with a
+# reset or absent job. That looked identical to warmup and briefly read as
+# "Preparing" while the printer's own display said 100%.
+for case in \
+  '{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":100.0,"state":"FIN_OK","end":1786874596}}' \
+  '{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":0.0,"end":1786874596}}' \
+  '{"printer_state":"PRINTING","connect_state":"PRINTING"}'
+do
+  if jq -f "$NORMALIZE" <<<"{\"printers\":[$case]}" |
+     jq -e '.printers[0].preparing == false' >/dev/null 2>&1; then
+    printf '  ok    a finished or absent job is not preparing\n'
+    passed=$(( passed + 1 ))
+  else
+    printf '  FAIL  a finished or absent job is not preparing: %s\n' "$case"
+    failed=$(( failed + 1 ))
+  fi
+done
+if jq -f "$NORMALIZE" <<<'{"printers":[{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":0.0,"time_remaining":60}}]}' |
+   jq -e '.printers[0].preparing == true' >/dev/null 2>&1; then
+  printf '  ok    a printing job at zero progress is preparing\n'
+  passed=$(( passed + 1 ))
+else
+  printf '  FAIL  a printing job at zero progress is preparing\n'
+  failed=$(( failed + 1 ))
+fi
+if jq -f "$NORMALIZE" <<<'{"printers":[{"printer_state":"PRINTING","connect_state":"PRINTING","job_info":{"id":1,"display_name":"x.bgcode","progress":12.0,"time_remaining":60}}]}' |
+   jq -e '.printers[0].preparing == false' >/dev/null 2>&1; then
+  printf '  ok    a job past zero progress is not preparing\n'
+  passed=$(( passed + 1 ))
+else
+  printf '  FAIL  a job past zero progress is not preparing\n'
+  failed=$(( failed + 1 ))
+fi
+if jq -f "$NORMALIZE" <<<'{"printers":[{"printer_state":"FINISHED","connect_state":"FINISHED"}]}' |
+   jq -e '.printers[0].preparing == false' >/dev/null 2>&1; then
+  printf '  ok    a printer that is not printing is not preparing\n'
+  passed=$(( passed + 1 ))
+else
+  printf '  FAIL  a printer that is not printing is not preparing\n'
+  failed=$(( failed + 1 ))
+fi
+
 # --- ordering ---------------------------------------------------------------
 echo
 echo "ordering"
@@ -169,6 +213,13 @@ else
   printf '  FAIL  a non-zero remaining time survives\n'
   failed=$(( failed + 1 ))
 fi
+# The captured fixture sits at 1%, just past the line, so it is no longer
+# preparing. Live observation showed 1% arriving while the nozzle was still
+# climbing to print temperature, but progress leaving zero is the only
+# principled boundary available — Connect exposes no phase, and temperature
+# cannot separate heating from bed levelling.
+check "a job past zero progress is not preparing" printing.json \
+  '(first(.printers[] | select(.name == "Busy MK4")) | .preparing == false)'
 check "reads targets while heating" printing.json \
   '(first(.printers[] | select(.name == "Busy MK4")) | .temps.nozzleTarget == 175.0 and .temps.bedTarget == 85.0)'
 

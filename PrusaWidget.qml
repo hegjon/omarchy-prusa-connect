@@ -105,6 +105,15 @@ Panel {
     }
   }
 
+  // PRINTING covers heating, bed levelling and priming as well as extruding.
+  // Saying "Preparing" is vague on purpose: Connect exposes no sub-phase, and
+  // temperatures cannot tell heating from levelling, since levelling runs with
+  // the nozzle at target. The one true claim is that nothing is printed yet.
+  function labelForPrinter(printer) {
+    if (printer.preparing) return "Preparing"
+    return stateLabel(printer.state)
+  }
+
   // A printer with an unanswered dialog reads as wanting a human even when its
   // state says FINISHED, so the icon and its colour follow needsAttention rather
   // than the state alone — the same rule as the bar badge and the notification.
@@ -215,7 +224,8 @@ Panel {
       var printing = printers.filter(function(p) { return p.state === "PRINTING" })
       // One printer running is the common case, so show its progress rather
       // than a count that says less.
-      if (printing.length === 1 && printing[0].job && printing[0].job.progress !== null)
+      if (printing.length === 1 && !printing[0].preparing
+          && printing[0].job && printing[0].job.progress !== null)
         return Math.round(printing[0].job.progress) + "%"
     }
     return ""
@@ -587,8 +597,10 @@ Panel {
 
                   Text {
                     id: stateText
-                    text: root.stateLabel(printerEntry.modelData.state)
-                      + (printerEntry.modelData.job && printerEntry.modelData.job.progress !== null
+                    text: root.labelForPrinter(printerEntry.modelData)
+                      + (!printerEntry.modelData.preparing
+                         && printerEntry.modelData.job
+                         && printerEntry.modelData.job.progress !== null
                          ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
                     // Deliberately the state's own colour, not colorForPrinter: a
                     // finished print is not a problem just because a dialog is also

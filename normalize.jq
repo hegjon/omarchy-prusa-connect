@@ -52,7 +52,12 @@ def job_of:
         name: (.display_name? // .name? // .file_name? // .path? // null),
         progress: as_number(.progress? // .progress_percent? // .percent?),
         remaining: as_number(.time_remaining? // .remaining_time? // .estimated_time_remaining?),
-        elapsed: as_number(.time_printing? // .print_time? // .elapsed?)
+        elapsed: as_number(.time_printing? // .print_time? // .elapsed?),
+        # The job carries its own state, separate from the printer's: PRINTING
+        # while running, FIN_OK once done. `end` appears only when it is over.
+        # Together these say whether a job is finished even during the window
+        # where the printer is still reporting PRINTING as it cools.
+        ended: ((.end? != null) or (((.state? // "") | ascii_upcase) | startswith("FIN")))
       }
       # Connect has no estimate until the printer works one out, and signals that
       # with both 0 and -1 — the same job reported 0 at 117 seconds in and -1 at
@@ -131,6 +136,28 @@ def printer_of:
   # would be noise.
   | . + { needsAttention: (
       .state == "ATTENTION" or .state == "ERROR" or (.online and .attention != null)
+    ) }
+  # A job reports PRINTING from the moment it is accepted, through heating, mesh
+  # bed levelling and priming, none of which extrude anything. On a short print
+  # that is most of the wall clock: a six-minute job measured three and a half
+  # minutes before progress left zero.
+  #
+  # Connect exposes no sub-phase — its only state enum is the printer-level one,
+  # and it says PRINTING throughout — and temperatures cannot separate the
+  # phases either, because bed levelling runs with the nozzle held at 175 C, at
+  # target rather than below it. So this deliberately does not name what the
+  # printer is doing. All it claims is that nothing has been printed yet.
+  #
+  # "Printing with no progress" alone is not enough: a printer cooling down
+  # after a finished job passes through the same shape, and briefly read as
+  # Preparing while its own display said 100%. So require a job that exists and
+  # has not ended — the job's own state and `end` timestamp settle that even
+  # while the printer is still reporting PRINTING.
+  | . + { preparing: (
+      .state == "PRINTING"
+      and .job != null
+      and (.job.ended | not)
+      and ((.job.progress // 0) <= 0)
     ) };
 
 # Unreachable printers sink to the bottom: their detail is stale by definition,

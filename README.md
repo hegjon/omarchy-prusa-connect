@@ -157,6 +157,20 @@ Each printer shows an illustration of its model, its name, state, current job
 with progress and ETA, and either live temperatures or when it was last seen. A
 printer asking for attention shows the text of the dialog waiting on its screen.
 
+A job reads **Preparing** until progress leaves zero. Connect reports `PRINTING`
+from the moment a job is accepted, through heating, mesh bed levelling and
+priming — on a short print that is most of the wall clock, and one six-minute
+job spent three and a half minutes there. The wording is deliberately vague:
+Connect exposes no sub-phase, and temperatures cannot separate heating from bed
+levelling either, since levelling runs with the nozzle held at 175 °C, at target
+rather than below it. The one thing that can be said truthfully is that nothing
+has been printed yet. The temperatures on the row show what is actually warming.
+
+"Printing with no progress" alone is not enough to mean preparing: a printer
+cooling down after a job can report `PRINTING` with a reset job, which looks
+identical to warmup. The job's own `state` (`FIN_OK` when done) and its `end`
+timestamp settle it — both distinct from the printer-level state.
+
 The illustrations are Prusa's own, bundled from Connect — see
 [`assets/printers/NOTICE`](assets/printers/NOTICE). The model is derived from
 Connect's model code and tool count, so an MK4IS shows an MK4 (Input Shaper is
