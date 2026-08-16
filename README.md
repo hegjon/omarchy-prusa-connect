@@ -2,7 +2,9 @@
 
 Monitor your Prusa Connect printer fleet from the Omarchy bar: printer state,
 current job and progress, temperatures, and the reason a printer wants
-attention. Monitoring only — this plugin never sends commands to a printer.
+attention. It is read-only except for one action: **Set ready** on a finished
+printer, the same command Connect's own button sends, always behind a
+confirmation.
 
 ![The panel listing four printers: one printing with progress and ETA, one
 finished with an unanswered dialog, and two offline](preview.png)
@@ -180,6 +182,26 @@ unrecognised model falls back to a generic printer.
 Printers Connect cannot currently reach are listed last — their detail is stale
 by definition, so they are the least worth reading first. Everything else keeps
 the order Connect sends, which is by name.
+
+### Set ready
+
+A finished printer shows a **Set ready** button, matching Connect's own "Set
+ready!". It is offered only where it applies: the job has finished, Connect can
+reach the printer, and the account has write rights on it.
+
+It always confirms first, and the prompt asks about the machine rather than
+about the click:
+
+> Is the printer ready? Is the print sheet in place, empty and clean?
+
+That is the point of the command. Marking a printer ready tells the fleet it can
+accept another job, so a queued job could start printing onto whatever is still
+on the sheet. The question worth answering is a physical one.
+
+The command goes to Prusa's mobile API (`PUT /api/v1/printers/{uuid}/command/ready`),
+which documents it and accepts the same account token the fleet is read with.
+Connect's web app uses an unpublished endpoint that would have to be
+reverse-engineered from its bundle.
 
 The status icon follows `needsAttention`, so a printer sitting in `FINISHED`
 with an unanswered dialog shows an alert rather than a tick. The state word

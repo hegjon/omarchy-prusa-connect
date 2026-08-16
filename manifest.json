@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Jonny Heggheim",
   "license": "MIT",
-  "description": "Monitor your Prusa Connect printer fleet from the Omarchy bar: state, current job, progress and temperatures, with notifications on finish, attention and error.",
+  "description": "Monitor your Prusa Connect printer fleet from the Omarchy bar: state, current job, progress and temperatures, with notifications and a confirmed Set ready action on finished printers.",
   "homepage": "https://github.com/hegjon/omarchy-prusa-connect",
   "repository": "https://github.com/hegjon/omarchy-prusa-connect",
   "keywords": [

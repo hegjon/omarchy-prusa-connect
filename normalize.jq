@@ -101,6 +101,9 @@ def printer_of:
     name: (.name // .printer_type_name // "Printer"),
     model: (.printer_type_name // .printer_model // null),
     assetKey: asset_key,
+    # Connect grants per-printer rights, and a fleet can be shared with a team.
+    # Only offer an action on a printer this account may actually command.
+    canControl: (.rights_w // false),
     location: (.location // null),
     team: (.team_name // null),
     firmware: (.firmware // null),

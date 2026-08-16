@@ -28,6 +28,11 @@ Panel {
   property bool refreshing: false
   property real lastUpdatedAt: 0
 
+  // The printer awaiting confirmation of "Set ready", or null when no dialog
+  // is open. Holds the whole row so the prompt can name it.
+  property var readyCandidate: null
+  property string commandError: ""
+
   // Notification bookkeeping, keyed by printer uuid: what each printer looked
   // like last poll, so only genuine transitions announce themselves.
   property var lastSeenById: ({})
@@ -349,6 +354,56 @@ Panel {
     notifyProcess.running = true
   }
 
+  // --- commands ---------------------------------------------------------
+
+  // Setting a printer ready is a claim about the physical machine, not just a
+  // state change: it tells the fleet this printer can accept another job, and a
+  // queued job could then print into whatever is still on the sheet. So it is
+  // always confirmed, and the prompt asks about the sheet rather than about the
+  // API call.
+  function askSetReady(printer) {
+    commandError = ""
+    readyCandidate = printer
+  }
+
+  function sendSetReady() {
+    if (!readyCandidate || !readyCandidate.uuid) return
+    commandProcess.running = false
+    commandProcess.command = [commandPath, "ready", String(readyCandidate.uuid)]
+    commandProcess.running = true
+    readyCandidate = null
+  }
+
+  readonly property string commandPath:
+    Qt.resolvedUrl("prusa-connect-command").toString().replace(/^file:\/\//, "")
+
+  Process {
+    id: commandProcess
+    running: false
+    command: []
+
+    stdout: StdioCollector { id: commandStdout; waitForEnd: true }
+
+    onExited: function(exitCode) {
+      var parsed = null
+      try {
+        parsed = JSON.parse(String(commandStdout.text || ""))
+      } catch (error) {
+        parsed = null
+      }
+      if (exitCode !== 0 || !parsed) {
+        root.commandError = "The command helper failed"
+      } else if (parsed.error) {
+        root.commandError = String(parsed.error)
+        console.warn("prusa-connect: command failed:", root.commandError)
+      } else {
+        root.commandError = ""
+      }
+      // Whatever happened, the fleet has probably moved on.
+      root.refresh()
+    }
+  }
+
   // --- processes and timers ---------------------------------------------
 
   Process {
@@ -461,10 +516,35 @@ Panel {
     contentWidth: fleetPanel.fittedContentWidth(Style.space(420))
     contentHeight: fleetPanel.fittedContentHeight(column.implicitHeight, Style.space(620))
 
+    // The prompt asks about the machine, not the request. Marking a printer
+    // ready lets a queued job start, so the thing worth checking is whether the
+    // sheet is actually clear — not whether the user meant to click.
+    ConfirmDialog {
+      anchors.fill: parent
+      z: 10
+      opened: root.readyCandidate !== null
+      message: root.readyCandidate
+        ? "Set " + root.readyCandidate.name + " ready?\n\n"
+          + "Is the printer ready? Is the print sheet in place, empty and clean?"
+        : ""
+      confirmText: "Set ready"
+      cancelText: "Cancel"
+      background: Color.popups.background
+      foreground: Color.popups.text
+      fontFamily: Style.font.family
+
+      onConfirmed: root.sendSetReady()
+      onCanceled: root.readyCandidate = null
+    }
+
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      onCloseRequested: {
+        // Escape dismisses the prompt before it closes the panel.
+        if (root.readyCandidate !== null) root.readyCandidate = null
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       // One action per press: a held key would otherwise refetch every repeat.
@@ -510,6 +590,16 @@ Panel {
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
+        }
+
+        Text {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          visible: root.commandError !== ""
+          text: root.commandError
+          color: Color.urgent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
         }
 
         Text {
@@ -685,6 +775,18 @@ Panel {
               color: root.detailColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
+            }
+
+            // Connect's own "Set ready!", offered only where it applies: a
+            // finished job, a reachable printer, and write rights on it.
+            Button {
+              visible: printerEntry.modelData.state === "FINISHED"
+                && printerEntry.modelData.online
+                && printerEntry.modelData.canControl === true
+              text: "Set ready"
+              bordered: true
+              fontSize: Style.font.caption
+              onClicked: root.askSetReady(printerEntry.modelData)
             }
               }
             }

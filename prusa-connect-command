@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Send a command to a printer through Prusa Connect.
+#
+# Usage: prusa-connect-command ready <printer-uuid>
+#        prusa-connect-command unready <printer-uuid>
+#
+# Prints {"ok":true} on success or {"error":"…"} on failure, exiting 0 either
+# way so the widget can render the reason.
+#
+# "ready" is what Connect's own "Set ready!" button sends: it clears a finished
+# job and tells the fleet the printer can accept another. That is a claim about
+# the physical machine — if the previous part is still on the sheet, a queued
+# job could print into it — so the caller is expected to confirm with a human
+# first. This script does not ask; it only sends.
+#
+# The commands go to the mobile API, which documents them (PUT
+# /api/v1/printers/{uuid}/command/ready) and accepts the same account token as
+# the web API the fleet is read from. The web app's own endpoint is not
+# published anywhere and would have to be reverse-engineered from its bundle.
+
+set -uo pipefail
+umask 077
+
+readonly COMMAND_BASE="https://connect-mobile-api.prusa3d.com/api/v1/printers"
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+
+# shellcheck source=lib/prusa-auth.sh
+source "$SCRIPT_DIR/lib/prusa-auth.sh" || {
+  printf '{"error":"lib/prusa-auth.sh is missing from the plugin folder"}\n'
+  exit 0
+}
+
+prusa_require_commands
+
+readonly ACTION="${1:-}"
+readonly UUID="${2:-}"
+
+case "$ACTION" in
+  ready|unready) ;;
+  "") die "usage: prusa-connect-command <ready|unready> <printer-uuid>" ;;
+  *) die "unknown command: $ACTION" ;;
+esac
+
+# A malformed uuid would otherwise be pasted straight into a URL.
+[[ $UUID =~ ^[0-9a-fA-F-]{36}$ ]] || die "not a printer uuid: ${UUID:-<missing>}"
+
+prusa_ensure_access_token || prusa_fail
+
+response=$(
+  printf 'url = "%s/%s/command/%s"\nrequest = "PUT"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Length: 0"\nsilent\nshow-error\n' \
+    "$COMMAND_BASE" "$UUID" "$ACTION" "$PRUSA_ACCESS_TOKEN" |
+    curl --config - -m 30 -w '\n%{http_code}'
+)
+unset PRUSA_ACCESS_TOKEN
+
+code=$(tail -n1 <<<"$response")
+payload=$(sed '$d' <<<"$response")
+unset response
+
+case "$code" in
+  200|201|202|204)
+    jq -cn --arg a "$ACTION" '{ok: true, action: $a}'
+    ;;
+  401|403)
+    # The cached token was rejected; drop it so the next call renews cleanly.
+    rm -f "$PRUSA_TOKEN_FILE"
+    die_needs_login "Prusa Connect rejected the session — run prusa-connect-login"
+    ;;
+  404) die "Prusa Connect does not know that printer" ;;
+  422) die "Prusa Connect refused the command for this printer's state" ;;
+  429) die "Prusa Connect is rate limiting — try again shortly" ;;
+  "")  die "Could not reach Prusa Connect" ;;
+  *)
+    detail=$(jq -r '.message? // .detail? // empty' <<<"$payload" 2>/dev/null)
+    if [[ -n $detail ]]; then
+      die "Prusa Connect returned HTTP $code: $detail"
+    fi
+    die "Prusa Connect returned HTTP $code"
+    ;;
+esac

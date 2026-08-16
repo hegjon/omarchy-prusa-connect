@@ -16,122 +16,24 @@
 set -uo pipefail
 umask 077
 
-readonly PLUGIN_ID="io.github.hegjon.prusa-connect"
-readonly CLIENT_ID="MRHTlZhZqkNrrQ6FUPtjyusAz8nc59ErHXP8XkS4"
-readonly TOKEN_URL="https://account.prusa3d.com/o/token/"
 readonly PRINTERS_URL="https://connect.prusa3d.com/app/printers"
 readonly PAGE_LIMIT=100
 
-readonly STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/prusa-connect"
-readonly ACCOUNT_FILE="$STATE_DIR/account"
-readonly CACHE_DIR="${XDG_RUNTIME_DIR:-/tmp}/omarchy-prusa-connect"
-readonly TOKEN_FILE="$CACHE_DIR/access-token"
-
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 readonly NORMALIZE="$SCRIPT_DIR/normalize.jq"
 
-die() {
-  jq -cn --arg m "$1" '{error: $m}'
+# shellcheck source=lib/prusa-auth.sh
+source "$SCRIPT_DIR/lib/prusa-auth.sh" || {
+  printf '{"error":"lib/prusa-auth.sh is missing from the plugin folder"}\n'
   exit 0
 }
 
-die_needs_login() {
-  jq -cn --arg m "$1" '{error: $m, needsLogin: true}'
-  exit 0
-}
-
-for cmd in curl jq secret-tool; do
-  command -v "$cmd" >/dev/null || die "required command not found: $cmd"
-done
+prusa_require_commands
 [[ -r $NORMALIZE ]] || die "normalize.jq is missing from the plugin folder"
 
-mkdir -p "$CACHE_DIR" 2>/dev/null
-chmod 700 "$CACHE_DIR" 2>/dev/null
-
-urlencode() { jq -rn --arg v "$1" '$v|@uri'; }
-
-# --- credentials -------------------------------------------------------------
-
-[[ -r $ACCOUNT_FILE ]] || die_needs_login "Not signed in to Prusa Connect"
-ACCOUNT=$(head -n1 "$ACCOUNT_FILE")
-[[ -n $ACCOUNT ]] || die_needs_login "Not signed in to Prusa Connect"
-
-read_refresh_token() {
-  secret-tool lookup application "$PLUGIN_ID" account "$ACCOUNT" 2>/dev/null
-}
-
-write_refresh_token() {
-  printf '%s' "$1" | secret-tool store \
-    --label="Prusa Connect refresh token" \
-    application "$PLUGIN_ID" account "$ACCOUNT" 2>/dev/null
-}
-
-# --- access token ------------------------------------------------------------
-
-read_cached_access_token() {
-  [[ -r $TOKEN_FILE ]] || return 1
-  local expiry token
-  IFS=$'\t' read -r expiry token <"$TOKEN_FILE" || return 1
-  [[ ${expiry:-} =~ ^[0-9]+$ && -n ${token:-} ]] || return 1
-  # Refresh a minute early so a token cannot expire mid-request.
-  (( expiry > $(date +%s) + 60 )) || return 1
-  printf '%s' "$token"
-}
-
-refresh_access_token() {
-  local refresh body response code payload access rotated expires_in
-
-  refresh=$(read_refresh_token)
-  [[ -n $refresh ]] || die_needs_login "No Prusa Connect credentials in the keyring"
-
-  body="grant_type=refresh_token&client_id=$(urlencode "$CLIENT_ID")"
-  body+="&refresh_token=$(urlencode "$refresh")"
-
-  # Over stdin, so the refresh token never appears in argv.
-  response=$(
-    printf 'url = "%s"\nheader = "Content-Type: application/x-www-form-urlencoded"\ndata = "%s"\nsilent\nshow-error\n' \
-      "$TOKEN_URL" "$body" | curl --config - -m 30 -w '\n%{http_code}'
-  )
-  unset body refresh
-
-  code=$(tail -n1 <<<"$response")
-  payload=$(sed '$d' <<<"$response")
-  unset response
-
-  if [[ $code != 200 ]]; then
-    case "$(jq -r '.error // empty' <<<"$payload" 2>/dev/null)" in
-      invalid_grant)
-        die_needs_login "Prusa Connect sign-in has expired — run prusa-connect-login" ;;
-      *)
-        die "Could not renew the Prusa Connect session (HTTP $code)" ;;
-    esac
-  fi
-
-  access=$(jq -r '.access_token // empty' <<<"$payload")
-  rotated=$(jq -r '.refresh_token // empty' <<<"$payload")
-  expires_in=$(jq -r '.expires_in // 3600' <<<"$payload")
-  unset payload
-  [[ -n $access ]] || die "Prusa returned no access token"
-
-  # Prusa rotates the refresh token; persist it at once or the next run locks us out.
-  if [[ -n $rotated ]]; then
-    write_refresh_token "$rotated" ||
-      die "Could not update the keyring — is your login keyring unlocked?"
-  fi
-  unset rotated
-
-  [[ $expires_in =~ ^[0-9]+$ ]] || expires_in=3600
-  local tmp
-  tmp=$(mktemp "$CACHE_DIR/token.XXXXXX") || die "Could not cache the access token"
-  printf '%s\t%s' "$(( $(date +%s) + expires_in ))" "$access" >"$tmp"
-  chmod 600 "$tmp"
-  mv -f "$tmp" "$TOKEN_FILE"
-
-  printf '%s' "$access"
-}
-
-ACCESS_TOKEN=$(read_cached_access_token) || ACCESS_TOKEN=$(refresh_access_token)
-[[ -n $ACCESS_TOKEN ]] || die "No Prusa Connect access token"
+prusa_ensure_access_token || prusa_fail
+ACCESS_TOKEN="$PRUSA_ACCESS_TOKEN"
 
 # --- fetch, paging until the fleet is complete -------------------------------
 
@@ -143,19 +45,19 @@ fetch_page() {
       curl --config - -m 30 -w '\n%{http_code}'
   )
   code=$(tail -n1 <<<"$response")
-  printf '%s' "$code" >"$CACHE_DIR/.last-code"
+  printf '%s' "$code" >"$PRUSA_CACHE_DIR/.last-code"
   sed '$d' <<<"$response"
 }
 
 raw=$(fetch_page 0)
-code=$(<"$CACHE_DIR/.last-code")
-rm -f "$CACHE_DIR/.last-code"
+code=$(<"$PRUSA_CACHE_DIR/.last-code")
+rm -f "$PRUSA_CACHE_DIR/.last-code"
 
 case "$code" in
   200) ;;
   401|403)
     # The cached token was rejected; drop it so the next run renews cleanly.
-    rm -f "$TOKEN_FILE"
+    rm -f "$PRUSA_TOKEN_FILE"
     die_needs_login "Prusa Connect rejected the session — run prusa-connect-login" ;;
   429) die "Prusa Connect is rate limiting — try again shortly" ;;
   "" ) die "Could not reach Prusa Connect" ;;
@@ -171,7 +73,7 @@ if (( total > PAGE_LIMIT )); then
   offset=$PAGE_LIMIT
   while (( offset < total )); do
     page=$(fetch_page "$offset")
-    rm -f "$CACHE_DIR/.last-code"
+    rm -f "$PRUSA_CACHE_DIR/.last-code"
     jq -e . >/dev/null 2>&1 <<<"$page" || break
     raw=$(jq -s '.[0] * {printers: (.[0].printers + .[1].printers)}' \
       <(printf '%s' "$raw") <(printf '%s' "$page")) || break
