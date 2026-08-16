@@ -8,13 +8,29 @@ Prusa Connect web application at https://connect.prusa3d.com. They are included
 here so the plugin can show a recognisable illustration of each printer model
 alongside its status.
 
-No licence grant for redistribution has been identified. They are bundled on the
-understanding that this is a small, non-commercial, interoperability-oriented
-use that depicts Prusa's own products in a tool for Prusa's own customers, and
-that it is the kind of thing a rights holder would ask to have removed rather
-than litigate. If Prusa Research would prefer they not be redistributed, remove
-this directory and the plugin falls back to generic status glyphs with no loss
-of function — see stateGlyph() in PrusaWidget.qml.
+No licence grant for redistribution has been identified. This was checked rather
+than assumed, on 2026-08-16:
+
+  * The prusa3d GitHub organisation (80 public repositories) contains no
+    repository publishing these per-model illustrations. The closest candidate,
+    Prusa-Link-Web (GPL-3.0, "Prusa Web interface resources"), ships only user
+    interface icons — arrows, folders, fans, cameras — and no printer artwork.
+    That fits: PrusaLink runs on a single printer and never needs a model
+    gallery.
+  * Prusa's media assets page (prusa3d.com/page/media-assets_987) offers press
+    packages of photographs and logos but states no licence terms, permissions,
+    or restrictions of any kind.
+  * Prusa's Open Community License covers hardware CAD files, not artwork.
+
+So these files appear only in the closed-source Connect web application. They
+are bundled on the understanding that this is a small, non-commercial,
+interoperability-oriented use that depicts Prusa's own products in a tool for
+Prusa's own customers, and that it is the kind of thing a rights holder would
+ask to have removed rather than litigate.
+
+If Prusa Research would prefer they not be redistributed, remove this directory:
+the plugin falls back to generic status glyphs with no loss of function — see
+stateGlyph() in PrusaWidget.qml. Media enquiries: media@prusa3d.com.
 
 Trade marks, including the Prusa name and logo, belong to Prusa Research a.s.
 This plugin is not affiliated with, endorsed by, or supported by Prusa Research.
