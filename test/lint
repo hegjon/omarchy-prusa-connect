@@ -24,8 +24,10 @@
 
 set -uo pipefail
 
-readonly TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly PLUGIN_DIR="$(dirname -- "$TEST_DIR")"
+TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly TEST_DIR
+PLUGIN_DIR="$(dirname -- "$TEST_DIR")"
+readonly PLUGIN_DIR
 readonly SHELL_ROOT="${OMARCHY_PATH:-/usr/share/omarchy}/shell"
 readonly QML_ROOT="${OMARCHY_QML_ROOT:-/usr/lib/qt6/qml}"
 

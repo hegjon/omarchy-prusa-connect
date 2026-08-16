@@ -5,8 +5,10 @@
 
 set -uo pipefail
 
-readonly TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly PLUGIN_DIR="$(dirname -- "$TEST_DIR")"
+TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly TEST_DIR
+PLUGIN_DIR="$(dirname -- "$TEST_DIR")"
+readonly PLUGIN_DIR
 readonly NORMALIZE="$PLUGIN_DIR/normalize.jq"
 
 passed=0

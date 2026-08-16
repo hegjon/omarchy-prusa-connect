@@ -19,8 +19,10 @@
 
 set -uo pipefail
 
-readonly TOOLS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly PLUGIN_DIR="$(dirname -- "$TOOLS_DIR")"
+TOOLS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly TOOLS_DIR
+PLUGIN_DIR="$(dirname -- "$TOOLS_DIR")"
+readonly PLUGIN_DIR
 readonly ASSET_DIR="$PLUGIN_DIR/assets/printers"
 readonly BASE="https://connect.prusa3d.com"
 
