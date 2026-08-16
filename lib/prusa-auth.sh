@@ -19,6 +19,7 @@ readonly PRUSA_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/prusa-co
 readonly PRUSA_ACCOUNT_FILE="$PRUSA_STATE_DIR/account"
 readonly PRUSA_CACHE_DIR="${XDG_RUNTIME_DIR:-/tmp}/omarchy-prusa-connect"
 readonly PRUSA_TOKEN_FILE="$PRUSA_CACHE_DIR/access-token"
+readonly PRUSA_REFRESH_LOCK="$PRUSA_CACHE_DIR/refresh.lock"
 
 die() {
   jq -cn --arg m "$1" '{error: $m}'
@@ -48,6 +49,12 @@ prusa_fail() {
     die_needs_login "${PRUSA_ERROR:-Not signed in to Prusa Connect}"
   fi
   die "${PRUSA_ERROR:-Prusa Connect request failed}"
+}
+
+prusa_release_refresh_lock() {
+  [[ -n ${PRUSA_LOCK_FD:-} ]] || return 0
+  exec {PRUSA_LOCK_FD}>&- 2>/dev/null
+  PRUSA_LOCK_FD=""
 }
 
 prusa_urlencode() { jq -rn --arg v "$1" '$v|@uri'; }
@@ -97,13 +104,32 @@ prusa_read_cached_access_token() {
 }
 
 # Sets PRUSA_ACCESS_TOKEN.
+#
+# Serialized across processes. Prusa rotates the refresh token on every use, so
+# two refreshes racing each other leave the keyring holding whichever token was
+# written last while Prusa considers only the last *issued* one valid — and the
+# account is then locked out until someone pastes a new token by hand. This is
+# reachable in normal use: the widget polls on a timer while a person runs the
+# CLI, and it has happened.
 prusa_refresh_access_token() {
   local account="$1"
   local refresh body response code payload access rotated expires_in tmp
 
+  exec {PRUSA_LOCK_FD}>"$PRUSA_REFRESH_LOCK" 2>/dev/null || PRUSA_LOCK_FD=""
+  if [[ -n ${PRUSA_LOCK_FD:-} ]]; then
+    flock "$PRUSA_LOCK_FD" 2>/dev/null
+    # Another process may have refreshed while this one waited, so take its
+    # result rather than spending a rotation of our own.
+    if PRUSA_ACCESS_TOKEN=$(prusa_read_cached_access_token); then
+      exec {PRUSA_LOCK_FD}>&-
+      return 0
+    fi
+  fi
+
   refresh=$(prusa_read_refresh_token "$account")
   [[ -n $refresh ]] ||
-    { prusa_set_error "No Prusa Connect credentials in the keyring" 1; return 1; }
+    { prusa_release_refresh_lock
+      prusa_set_error "No Prusa Connect credentials in the keyring" 1; return 1; }
 
   body="grant_type=refresh_token&client_id=$(prusa_urlencode "$PRUSA_CLIENT_ID")"
   body+="&refresh_token=$(prusa_urlencode "$refresh")"
@@ -121,9 +147,11 @@ prusa_refresh_access_token() {
   if [[ $code != 200 ]]; then
     case "$(jq -r '.error // empty' <<<"$payload" 2>/dev/null)" in
       invalid_grant)
+        prusa_release_refresh_lock
         prusa_set_error "Prusa Connect sign-in has expired — run prusa-connect-login" 1
         return 1 ;;
       *)
+        prusa_release_refresh_lock
         prusa_set_error "Could not renew the Prusa Connect session (HTTP $code)"
         return 1 ;;
     esac
@@ -133,23 +161,26 @@ prusa_refresh_access_token() {
   rotated=$(jq -r '.refresh_token // empty' <<<"$payload")
   expires_in=$(jq -r '.expires_in // 3600' <<<"$payload")
   unset payload
-  [[ -n $access ]] || { prusa_set_error "Prusa returned no access token"; return 1; }
+  [[ -n $access ]] ||
+    { prusa_release_refresh_lock; prusa_set_error "Prusa returned no access token"; return 1; }
 
   # Prusa rotates the refresh token; persist it at once or the next run locks us out.
   if [[ -n $rotated ]]; then
     prusa_write_refresh_token "$account" "$rotated" ||
-      { prusa_set_error "Could not update the keyring — is your login keyring unlocked?"; return 1; }
+      { prusa_release_refresh_lock
+        prusa_set_error "Could not update the keyring — is your login keyring unlocked?"; return 1; }
   fi
   unset rotated
 
   [[ $expires_in =~ ^[0-9]+$ ]] || expires_in=3600
   tmp=$(mktemp "$PRUSA_CACHE_DIR/token.XXXXXX") ||
-    { prusa_set_error "Could not cache the access token"; return 1; }
+    { prusa_release_refresh_lock; prusa_set_error "Could not cache the access token"; return 1; }
   printf '%s\t%s' "$(( $(date +%s) + expires_in ))" "$access" >"$tmp"
   chmod 600 "$tmp"
   mv -f "$tmp" "$PRUSA_TOKEN_FILE"
 
   PRUSA_ACCESS_TOKEN="$access"
+  prusa_release_refresh_lock
 }
 
 # Sets PRUSA_ACCESS_TOKEN to a usable token, renewing a spent one. Returns
