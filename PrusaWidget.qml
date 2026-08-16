@@ -173,12 +173,29 @@ Panel {
     })
   }
 
+  // Re-evaluated on a timer: a binding on Date.now() alone would never update,
+  // because nothing notifies it that time has passed.
+  property real nowMs: 0
+
+  // A failed poll leaves the previous fleet in place, which is right for the
+  // panel — stale rows plus "Updated 20 min ago" beat an empty box. The bar
+  // summary is different: "61%" is a claim about right now with no room to
+  // qualify it, and it went on asserting that long after the print had
+  // finished. So once the data is older than three polls, say nothing rather
+  // than something wrong. Three, so one missed poll does not blank the bar.
+  readonly property bool dataIsStale: {
+    if (lastUpdatedAt <= 0) return true
+    var pollMs = opened ? refreshIntervalMs : watchIntervalMs
+    return (nowMs - lastUpdatedAt) > pollMs * 3
+  }
+
   // BarIconButton is a fixed one-slot glyph holder — it pins its width to
   // slotSize and hides its label — so anything wider than a glyph paints over
   // the neighbouring widgets. Counts belong in the badge overlay below; this
   // stays short enough to sit inside the slot.
   readonly property string barSummary: {
     if (!showBarSummary || !initialized) return ""
+    if (lastError !== "" || dataIsStale) return ""
     if (fleet.printing > 0) {
       var printing = printers.filter(function(p) { return p.state === "PRINTING" })
       // One printer running is the common case, so show its progress rather
@@ -191,6 +208,8 @@ Panel {
 
   readonly property string tooltipSummary: {
     if (needsLogin) return "Prusa Connect: not signed in"
+    if (dataIsStale && lastUpdatedAt > 0)
+      return "Prusa Connect: last updated " + formatAgo(lastUpdatedAt / 1000)
     if (lastError !== "") return "Prusa Connect: " + lastError
     if (!initialized) return "Prusa Connect: loading…"
     var parts = []
@@ -224,6 +243,7 @@ Panel {
 
     if (parsed && parsed.error) {
       lastError = String(parsed.error)
+      console.warn("prusa-connect: poll failed:", lastError)
       needsLogin = parsed.needsLogin === true
       return
     }
@@ -344,6 +364,16 @@ Panel {
     onTriggered: root.refresh()
   }
 
+  Timer {
+    // Drives dataIsStale. Cheap, and independent of the poll timer so that a
+    // wedged poll cannot also freeze the staleness check that reveals it.
+    interval: 10000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.nowMs = Date.now()
+  }
+
   // A newly opened panel should not show data from twenty minutes ago.
   onOpenedChanged: if (opened) refresh()
 
@@ -367,7 +397,7 @@ Panel {
     // width never changes. Same idiom as the first-party widgets.
     Rectangle {
       id: attentionBadge
-      visible: root.fleet.attention > 0 && root.lastError === ""
+      visible: root.fleet.attention > 0 && root.lastError === "" && !root.dataIsStale
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.verticalCenter: parent.verticalCenter
       anchors.horizontalCenterOffset: button.opticalSize / 2 - Style.space(1)
