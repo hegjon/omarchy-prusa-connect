@@ -32,7 +32,8 @@
       "hideIdlePrinters": false,
       "refreshIntervalSec": 30,
       "watch": true,
-      "watchIntervalSec": 300,
+      "watchIntervalSec": 60,
+      "printingIntervalSec": 5,
       "notifyFinished": true,
       "notifyAttention": true,
       "notifyError": true,
@@ -70,11 +71,20 @@
       {
         "key": "watchIntervalSec",
         "type": "integer",
-        "label": "Background poll interval (seconds)",
+        "label": "Background poll interval when nothing is printing (seconds)",
         "min": 60,
         "max": 3600,
         "step": 30,
-        "defaultValue": 300
+        "defaultValue": 60
+      },
+      {
+        "key": "printingIntervalSec",
+        "type": "integer",
+        "label": "Poll interval while a printer is printing (seconds)",
+        "min": 2,
+        "max": 120,
+        "step": 1,
+        "defaultValue": 5
       },
       {
         "key": "notifyFinished",

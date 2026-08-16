@@ -109,19 +109,23 @@ Settings appear in the Omarchy bar widget settings.
 | Hide idle and offline printers | disabled | Show only printers doing something |
 | Refresh interval while the panel is open | `30` s | From 10 to 300 |
 | Keep polling in the background | enabled | Needed for the bar summary and notifications |
-| Background poll interval | `300` s | From 60 to 3600. Automatically drops to 60 s while a printer is actually printing |
+| Background poll interval | `60` s | From 60 to 3600. Used when nothing is printing |
+| Poll interval while printing | `5` s | From 2 to 120. Used whenever any printer is printing, panel open or not |
 | Notify when a print finishes | enabled | |
 | Notify when a printer needs attention | enabled | |
 | Notify on printer errors | enabled | |
 | Re-notify cooldown | `10` min | Minimum gap before the same printer notifies again |
 | Celsius | enabled | Off shows Fahrenheit |
 
-Polling adapts to what the fleet is doing: every 60 s while something is
-printing, since progress moves minute to minute and the bar should not sit
-visibly behind the printer's own display, and every `watchIntervalSec` otherwise,
-since an idle fleet does not change and polling it hard learns nothing. Opening
-the panel polls at `refreshIntervalSec` regardless. Lowering `watchIntervalSec`
-below 60 s still applies during a print; raising it does not slow one down.
+Polling adapts to what the fleet is doing. A running print is polled every
+`printingIntervalSec` (5 s by default) whether or not the panel is open, because
+its progress moves continuously and that is what people watch. An idle fleet is
+polled every `watchIntervalSec` (60 s), since it does not change. Opening the
+panel on an idle fleet polls at `refreshIntervalSec`.
+
+Be aware of the cost: at 5 s a print makes roughly 720 requests an hour, and
+Prusa documents no rate limit. If Connect starts refusing, the panel shows the
+error rather than hiding it, and raising `printingIntervalSec` is the fix.
 
 If a poll fails, the panel keeps showing the last known fleet with the age in
 its footer, but the bar stops showing a progress percentage or an attention

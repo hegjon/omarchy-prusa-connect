@@ -54,7 +54,8 @@ Panel {
   readonly property bool hideIdlePrinters: boolSetting("hideIdlePrinters", false)
   readonly property int refreshIntervalMs: intSetting("refreshIntervalSec", 30, 10, 300) * 1000
   readonly property bool watchEnabled: boolSetting("watch", true)
-  readonly property int watchIntervalMs: intSetting("watchIntervalSec", 300, 60, 3600) * 1000
+  readonly property int watchIntervalMs: intSetting("watchIntervalSec", 60, 60, 3600) * 1000
+  readonly property int printingIntervalMs: intSetting("printingIntervalSec", 5, 2, 120) * 1000
   readonly property bool notifyFinished: boolSetting("notifyFinished", true)
   readonly property bool notifyAttention: boolSetting("notifyAttention", true)
   readonly property bool notifyError: boolSetting("notifyError", true)
@@ -173,20 +174,17 @@ Panel {
     })
   }
 
-  // How often to poll. The panel being open is the strongest signal that
-  // someone is looking, so that wins. Otherwise it depends on whether anything
-  // is actually printing: progress moves minute to minute, and a five-minute
-  // background cadence leaves the bar visibly behind the printer's own display.
-  // An idle fleet does not change, so polling it every minute would be 1400
-  // requests a day to learn nothing.
+  // How often to poll. A running print is what people actually watch and its
+  // progress moves continuously, so it wins over every other signal: a print is
+  // polled at printingIntervalSec whether or not the panel is open. An idle
+  // fleet does not change, so it is polled far more gently.
   //
-  // Capped by watchIntervalSec rather than overriding it, so lowering that
-  // setting still takes effect while raising it does not slow down a live print.
-  readonly property int activePollMs: 60000
+  // Note the cost. At the 5 s default a print makes roughly 720 requests an
+  // hour, and Prusa documents no rate limit. A 429 surfaces as an error in the
+  // panel rather than silently; raising printingIntervalSec is the remedy.
   readonly property int pollIntervalMs: {
-    if (opened) return refreshIntervalMs
-    if (fleet.printing > 0) return Math.min(watchIntervalMs, activePollMs)
-    return watchIntervalMs
+    if (fleet.printing > 0) return printingIntervalMs
+    return opened ? refreshIntervalMs : watchIntervalMs
   }
 
   // Re-evaluated on a timer: a binding on Date.now() alone would never update,
@@ -198,10 +196,12 @@ Panel {
   // summary is different: "61%" is a claim about right now with no room to
   // qualify it, and it went on asserting that long after the print had
   // finished. So once the data is older than three polls, say nothing rather
-  // than something wrong. Three, so one missed poll does not blank the bar.
+  // than something wrong. Three, so one missed poll does not blank the bar,
+  // and never sooner than 30 s: at the 5 s printing cadence three polls is
+  // only 15 s, and one slow response should not make the bar flicker.
   readonly property bool dataIsStale: {
     if (lastUpdatedAt <= 0) return true
-    return (nowMs - lastUpdatedAt) > pollIntervalMs * 3
+    return (nowMs - lastUpdatedAt) > Math.max(pollIntervalMs * 3, 30000)
   }
 
   // BarIconButton is a fixed one-slot glyph holder — it pins its width to
