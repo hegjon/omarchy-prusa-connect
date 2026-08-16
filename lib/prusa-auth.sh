@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared Prusa Connect authentication, sourced by prusa-connect-fetch and
 # prusa-connect-command.
 #

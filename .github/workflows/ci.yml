@@ -40,6 +40,8 @@ jobs:
       - name: Check Bash syntax
         run: |
           bash -n prusa-connect-fetch
+          bash -n prusa-connect-command
+          bash -n lib/prusa-auth.sh
           bash -n tools/fetch-printer-assets
           bash -n test/test-normalize
           bash -n test/test-manifest
@@ -49,6 +51,8 @@ jobs:
         run: |
           shellcheck --severity=warning \
             prusa-connect-fetch \
+            prusa-connect-command \
+            lib/prusa-auth.sh \
             tools/fetch-printer-assets \
             test/test-normalize \
             test/test-manifest \
