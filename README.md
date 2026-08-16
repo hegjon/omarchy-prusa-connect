@@ -133,9 +133,20 @@ the summary count and the notification cannot drift apart.
 
 ## Panel
 
-Each printer shows its name, state, current job with progress and ETA, and
-either live temperatures or when it was last seen. A printer asking for
+Each printer shows a status icon, its name, state, current job with progress and
+ETA, and either live temperatures or when it was last seen. A printer asking for
 attention shows the text of the dialog waiting on its screen.
+
+The status icon follows `needsAttention`, so a printer sitting in `FINISHED`
+with an unanswered dialog shows an alert rather than a tick. The state word
+keeps its own colour: a finished print is not a problem just because a dialog is
+also waiting, and the icon and dialog line already carry that.
+
+Icons come from the Nerd Font's Material Design set — generic status shapes
+(`md-play`, `md-check_circle`, `md-alert`, `md-lan_disconnect`, `md-pause`)
+rather than printer variants, which are harder to tell apart at this size when
+every row is already a printer. `stateGlyph()` in `PrusaWidget.qml` lists the
+printer-family codepoints in a comment for anyone who prefers them.
 
 | Input | Action |
 | --- | --- |

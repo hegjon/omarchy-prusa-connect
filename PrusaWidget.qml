@@ -65,9 +65,28 @@ Panel {
   readonly property string backendPath:
     Qt.resolvedUrl("prusa-connect-fetch").toString().replace(/^file:\/\//, "")
 
-  readonly property string printerGlyph: String.fromCodePoint(0xF042A)   // nf-md-printer
+  readonly property string printerGlyph: String.fromCodePoint(0xF042B)   // nf-md-printer_3d
 
   // --- formatting -------------------------------------------------------
+
+  // Every row in the panel is a printer, so the icon's job is to carry state
+  // rather than repeat "printer". Generic status shapes read faster at this size
+  // than five near-identical printer silhouettes would. Swapping to the
+  // printer-icon family is a matter of changing the codepoints here:
+  // printing F18B8 nozzle_heat, finished F1146 printer_check,
+  // attention F11C0 nozzle_alert, offline F0E5D printer_off, idle F042B.
+  function stateGlyph(state) {
+    switch (state) {
+      case "PRINTING": return String.fromCodePoint(0xF040A)   // md-play
+      case "PAUSED": return String.fromCodePoint(0xF03E4)     // md-pause
+      case "FINISHED": return String.fromCodePoint(0xF05E0)   // md-check_circle
+      case "ATTENTION": return String.fromCodePoint(0xF0026)  // md-alert
+      case "ERROR": return String.fromCodePoint(0xF0028)      // md-alert_circle
+      case "OFFLINE": return String.fromCodePoint(0xF0319)    // md-lan_disconnect
+      case "STOPPED": return String.fromCodePoint(0xF0028)    // md-alert_circle
+      default: return String.fromCodePoint(0xF042B)           // md-printer_3d
+    }
+  }
 
   function stateLabel(state) {
     switch (state) {
@@ -83,6 +102,19 @@ Panel {
       case "STOPPED": return "Stopped"
       default: return state ? state.charAt(0) + state.slice(1).toLowerCase() : "Unknown"
     }
+  }
+
+  // A printer with an unanswered dialog reads as wanting a human even when its
+  // state says FINISHED, so the icon and its colour follow needsAttention rather
+  // than the state alone — the same rule as the bar badge and the notification.
+  function glyphForPrinter(printer) {
+    if (printer.needsAttention && printer.state !== "ERROR") return stateGlyph("ATTENTION")
+    return stateGlyph(printer.state)
+  }
+
+  function colorForPrinter(printer) {
+    if (printer.needsAttention) return Color.urgent
+    return stateColor(printer.state)
   }
 
   function stateColor(state) {
@@ -456,13 +488,26 @@ Panel {
             width: column.width
             spacing: Style.space(2)
 
-            // Name and state on one line, state colored by severity.
+            // Detail lines align under the name rather than under the icon.
+            readonly property real detailIndent: stateIcon.implicitWidth + Style.space(8)
+
+            // Status icon, name and state on one line.
             Row {
               width: parent.width
               spacing: Style.space(8)
 
               Text {
-                width: parent.width - stateText.implicitWidth - Style.space(8)
+                id: stateIcon
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.glyphForPrinter(printerEntry.modelData)
+                color: root.colorForPrinter(printerEntry.modelData)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+              }
+
+              Text {
+                width: parent.width - stateIcon.implicitWidth
+                  - stateText.implicitWidth - Style.space(16)
                 elide: Text.ElideRight
                 text: printerEntry.modelData.name
                 color: Color.popups.text
@@ -476,6 +521,9 @@ Panel {
                 text: root.stateLabel(printerEntry.modelData.state)
                   + (printerEntry.modelData.job && printerEntry.modelData.job.progress !== null
                      ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
+                // Deliberately the state's own colour, not colorForPrinter: a
+                // finished print is not a problem just because a dialog is also
+                // waiting. The icon and the dialog line carry that urgency.
                 color: root.stateColor(printerEntry.modelData.state)
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
@@ -484,7 +532,8 @@ Panel {
 
             // Current job, when one is running.
             Text {
-              width: parent.width
+              width: parent.width - printerEntry.detailIndent
+              leftPadding: printerEntry.detailIndent
               elide: Text.ElideRight
               visible: printerEntry.modelData.job !== null && printerEntry.modelData.job !== undefined
               text: {
@@ -502,7 +551,8 @@ Panel {
 
             // Why the printer wants attention, straight from Connect's dialog.
             Text {
-              width: parent.width
+              width: parent.width - printerEntry.detailIndent
+              leftPadding: printerEntry.detailIndent
               wrapMode: Text.WordWrap
               visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
               text: printerEntry.modelData.attention
@@ -515,7 +565,8 @@ Panel {
 
             // Temperatures for a live printer, or when it was last seen.
             Text {
-              width: parent.width
+              width: parent.width - printerEntry.detailIndent
+              leftPadding: printerEntry.detailIndent
               elide: Text.ElideRight
               text: {
                 if (!printerEntry.modelData.online)
