@@ -137,6 +137,10 @@ Each printer shows a status icon, its name, state, current job with progress and
 ETA, and either live temperatures or when it was last seen. A printer asking for
 attention shows the text of the dialog waiting on its screen.
 
+Printers Connect cannot currently reach are listed last — their detail is stale
+by definition, so they are the least worth reading first. Everything else keeps
+the order Connect sends, which is by name.
+
 The status icon follows `needsAttention`, so a printer sitting in `FINISHED`
 with an unanswered dialog shows an alert rather than a tick. The state word
 keeps its own colour: a finished print is not a problem just because a dialog is

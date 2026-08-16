@@ -99,9 +99,21 @@ def printer_of:
       .state == "ATTENTION" or .state == "ERROR" or (.online and .attention != null)
     ) };
 
+# Unreachable printers sink to the bottom: their detail is stale by definition,
+# so they are the least worth reading first. Everything else keeps the order
+# Connect sent, which is by name.
+#
+# Sorting entries by [group, original index] rather than calling sort_by on the
+# printers directly keeps the within-group order explicit instead of resting on
+# whether jq's sort happens to be stable.
+def offline_last:
+  to_entries
+  | sort_by([(if .value.online then 0 else 1 end), .key])
+  | map(.value);
+
 (.printers // []) | map(printer_of) as $printers
 | {
-    printers: $printers,
+    printers: ($printers | offline_last),
     summary: {
       total: ($printers | length),
       online: ([$printers[] | select(.online)] | length),

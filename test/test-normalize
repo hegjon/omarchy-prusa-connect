@@ -42,32 +42,34 @@ check "counts both disconnected printers as offline" printers.json \
 # Connect keeps reporting a stale printer_state for a printer that has been
 # unreachable for months; liveness has to win or the panel lies.
 check "stale ATTENTION on a disconnected printer reads as OFFLINE" printers.json \
-  '.printers[0].state == "OFFLINE" and .printers[0].printerState == "ATTENTION"'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .state == "OFFLINE" and .printerState == "ATTENTION")'
 check "a disconnected printer's stale ATTENTION does not count" printers.json \
-  '.printers[0].needsAttention == false'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .needsAttention == false)'
 
+# Printers are addressed by name, not position: normalize.jq sorts offline
+# printers last, so an index encodes an assumption about ordering.
 # Fields Connect omits entirely for a disconnected printer.
 check "missing temps normalize to null rather than erroring" printers.json \
-  '.printers[0].temps == null'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .temps == null)'
 check "missing job normalizes to null" printers.json \
-  '.printers[0].job == null'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .job == null)'
 check "material survives from the filament field" printers.json \
-  '.printers[0].material == "PETG"'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .material == "PETG")'
 
 # The live XL reports two tools and a pending dialog.
 check "reads temperatures from a live printer" printers.json \
-  '.printers[1].temps.nozzle == 19.0 and .printers[1].temps.bed == 18.3'
+  '(first(.printers[] | select(.name == "Studio XL")) | .temps.nozzle == 19.0 and .temps.bed == 18.3)'
 check "keeps both tools, in index order" printers.json \
-  '(.printers[1].tools | length) == 2 and .printers[1].tools[0].index == 1'
+  '(first(.printers[] | select(.name == "Studio XL")) | (.tools | length) == 2 and .tools[0].index == 1)'
 check "surfaces the pending dialog as the attention reason" printers.json \
-  '.printers[1].attention.title == "DISPLAY PROBLEM DETECTED"'
+  '(first(.printers[] | select(.name == "Studio XL")) | .attention.title == "DISPLAY PROBLEM DETECTED")'
 check "a printer with no dialog has no attention reason" printers.json \
-  '.printers[0].attention == null'
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .attention == null)'
 
 # An unanswered dialog means a printer wants a human even when its state does
 # not say so — the XL reports FINISHED with a dialog still on screen.
 check "a reachable printer with a dialog needs attention" printers.json \
-  '.printers[1].needsAttention == true'
+  '(first(.printers[] | select(.name == "Studio XL")) | .needsAttention == true)'
 check "the fleet summary counts it" printers.json \
   '.summary.attention == 1'
 
@@ -75,15 +77,29 @@ check "the fleet summary counts it" printers.json \
 echo
 echo "needsAttention"
 check "FINISHED with an unanswered dialog needs attention" attention.json \
-  '.printers[0].needsAttention == true'
+  '(first(.printers[] | select(.name == "Finished with dialog")) | .needsAttention == true)'
 check "a stale dialog on an unreachable printer does not" attention.json \
-  '.printers[1].needsAttention == false'
+  '(first(.printers[] | select(.name == "Offline with stale dialog")) | .needsAttention == false)'
 check "ATTENTION without a dialog still needs attention" attention.json \
-  '.printers[2].needsAttention == true'
+  '(first(.printers[] | select(.name == "Attention without dialog")) | .needsAttention == true)'
 check "an idle printer does not" attention.json \
-  '.printers[3].needsAttention == false'
+  '(first(.printers[] | select(.name == "Quietly idle")) | .needsAttention == false)'
 check "the summary counts exactly the two that qualify" attention.json \
   '.summary.attention == 2'
+
+# --- ordering ---------------------------------------------------------------
+echo
+echo "ordering"
+# Connect returns these by name: Workshop MK4 (offline), Studio XL (online),
+# Spare MK4 (offline). The reachable one should come first.
+check "the reachable printer sorts above the unreachable ones" printers.json \
+  '[.printers[].name] == ["Studio XL", "Workshop MK4", "Spare MK4"]'
+check "offline printers keep Connect's relative order" printers.json \
+  '[.printers[] | select(.online | not) | .name] == ["Workshop MK4", "Spare MK4"]'
+check "sorting does not lose or duplicate anyone" printers.json \
+  '(.printers | length) == 3 and ([.printers[].uuid] | unique | length) == 3'
+check "summary counts are unaffected by ordering" printers.json \
+  '.summary.total == 3 and .summary.online == 1 and .summary.offline == 2'
 
 # --- synthetic printing job -------------------------------------------------
 check "counts a printing printer" printing.json \
