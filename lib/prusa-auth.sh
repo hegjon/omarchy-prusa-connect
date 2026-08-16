@@ -123,7 +123,10 @@ prusa_write_refresh_token() {
 prusa_read_cached_access_token() {
   [[ -r $PRUSA_TOKEN_FILE ]] || return 1
   local expiry token
-  IFS=$'\t' read -r expiry token <"$PRUSA_TOKEN_FILE" || return 1
+  # `read` reports failure at end of file even when it filled the variables,
+  # and older caches were written without a trailing newline, so judge by
+  # what was read rather than by read's status.
+  IFS=$'\t' read -r expiry token <"$PRUSA_TOKEN_FILE" || [[ -n ${token:-} ]] || return 1
   [[ ${expiry:-} =~ ^[0-9]+$ && -n ${token:-} ]] || return 1
   # Refresh a minute early so a token cannot expire mid-request.
   (( expiry > $(date +%s) + 60 )) || return 1
@@ -200,7 +203,7 @@ prusa_refresh_access_token() {
   [[ $expires_in =~ ^[0-9]+$ ]] || expires_in=3600
   tmp=$(mktemp "$PRUSA_CACHE_DIR/token.XXXXXX") ||
     { prusa_release_refresh_lock; prusa_set_error "Could not cache the access token"; return 1; }
-  printf '%s\t%s' "$(( $(date +%s) + expires_in ))" "$access" >"$tmp"
+  printf '%s\t%s\n' "$(( $(date +%s) + expires_in ))" "$access" >"$tmp"
   chmod 600 "$tmp"
   mv -f "$tmp" "$PRUSA_TOKEN_FILE"
 
