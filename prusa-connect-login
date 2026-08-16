@@ -2,16 +2,14 @@
 
 """Sign in to Prusa Connect for the Omarchy Prusa Connect plugin.
 
-Three ways in:
+Two ways in:
 
   prusa-connect-login              Sign in with your Prusa account email and
                                    password (and TOTP code, if 2FA is on),
                                    the way the Prusa mobile app does.
   prusa-connect-login --paste      Paste a refresh token you copied from a
-                                   signed-in browser session.
-  prusa-connect-login --browser    OAuth sign-in in your browser with a
-                                   loopback redirect. Prusa does not currently
-                                   register one, so this fails today.
+                                   signed-in browser session, for when the
+                                   sign-in form has changed under us.
 
   prusa-connect-login --status     Report whether credentials are present.
   prusa-connect-login --forget     Remove them.
@@ -28,7 +26,6 @@ import base64
 import getpass
 import hashlib
 import http.cookiejar
-import http.server
 import json
 import os
 import re
@@ -36,7 +33,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -60,8 +56,6 @@ STATE_DIR = os.path.join(
     "prusa-connect",
 )
 ACCOUNT_FILE = os.path.join(STATE_DIR, "account")
-
-CALLBACK_TIMEOUT_SECONDS = 300
 
 
 class LoginError(Exception):
@@ -234,112 +228,6 @@ def nudge_widget() -> None:
         )
     except (OSError, subprocess.TimeoutExpired):
         pass
-
-
-# --- browser flow ------------------------------------------------------------
-
-
-class CallbackHandler(http.server.BaseHTTPRequestHandler):
-    result: dict = {}
-    expected_state = ""
-
-    def do_GET(self) -> None:  # noqa: N802 - required name
-        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        code = (query.get("code") or [""])[0]
-        state = (query.get("state") or [""])[0]
-        error = (query.get("error") or [""])[0]
-
-        if error:
-            CallbackHandler.result = {"error": error}
-            message, status = f"Sign-in failed: {error}", 400
-        elif not code:
-            CallbackHandler.result = {"error": "no authorization code returned"}
-            message, status = "Sign-in failed: no authorization code.", 400
-        elif not secrets.compare_digest(state, CallbackHandler.expected_state):
-            CallbackHandler.result = {"error": "state mismatch"}
-            message, status = "Sign-in failed: state mismatch.", 400
-        else:
-            CallbackHandler.result = {"code": code}
-            message, status = "Signed in. You can close this tab.", 200
-
-        body = (
-            "<!doctype html><meta charset=utf-8>"
-            "<title>Prusa Connect</title>"
-            "<body style='font:16px system-ui;padding:3rem;text-align:center'>"
-            f"<p>{message}</p></body>"
-        ).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args) -> None:  # silence the default stderr logging
-        pass
-
-
-def browser_login(port: int) -> None:
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(64)).rstrip(b"=").decode()
-    challenge = (
-        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
-        .rstrip(b"=")
-        .decode()
-    )
-    state = secrets.token_urlsafe(24)
-
-    server = http.server.HTTPServer(("127.0.0.1", port), CallbackHandler)
-    CallbackHandler.expected_state = state
-    CallbackHandler.result = {}
-    bound_port = server.server_address[1]
-    redirect_uri = f"http://127.0.0.1:{bound_port}/callback"
-
-    authorize = AUTHORIZE_URL + "?" + urllib.parse.urlencode({
-        "client_id": CLIENT_ID,
-        "response_type": "code",
-        "redirect_uri": redirect_uri,
-        "scope": SCOPE,
-        "state": state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    })
-
-    print(f"Listening on {redirect_uri}")
-    print("Opening your browser to sign in to Prusa...\n")
-    print("If it does not open, visit this URL yourself:\n")
-    print(f"  {authorize}\n")
-
-    if shutil.which("xdg-open"):
-        subprocess.Popen(
-            ["xdg-open", authorize],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-    thread = threading.Thread(target=server.handle_request, daemon=True)
-    thread.start()
-    thread.join(CALLBACK_TIMEOUT_SECONDS)
-    server.server_close()
-
-    if not CallbackHandler.result:
-        raise LoginError(
-            "timed out waiting for the browser.\n\n"
-            "If Prusa showed an error such as 'Mismatching redirect URI', then a\n"
-            "loopback address is not registered for this client and this flow\n"
-            "cannot work. Use the paste route instead:\n\n"
-            "    prusa-connect-login --paste"
-        )
-    if "error" in CallbackHandler.result:
-        raise LoginError(f"sign-in failed: {CallbackHandler.result['error']}")
-
-    tokens = post_token({
-        "grant_type": "authorization_code",
-        "client_id": CLIENT_ID,
-        "code": CallbackHandler.result["code"],
-        "redirect_uri": redirect_uri,
-        "code_verifier": verifier,
-    })
-    account = persist(tokens)
-    print(f"Signed in ({account}). The refresh token is in your GNOME keyring.")
 
 
 # --- credential flow ---------------------------------------------------------
@@ -667,9 +555,6 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--browser", action="store_true",
-                       help="OAuth sign-in in the browser with a loopback redirect "
-                            "(Prusa does not currently register one)")
     group.add_argument("--paste", action="store_true",
                        help="paste a refresh token instead of signing in")
     group.add_argument("--stdin", action="store_true",
@@ -679,8 +564,6 @@ def main() -> int:
     group.add_argument("--forget", action="store_true",
                        help="remove stored credentials")
     parser.add_argument("--email", help="Prusa account email (asked for if omitted)")
-    parser.add_argument("--port", type=int, default=0,
-                        help="fixed loopback port for --browser (default: ephemeral)")
     parser.add_argument("--debug", action="store_true",
                         help="print request shape and raw responses to stderr")
     args = parser.parse_args()
@@ -700,9 +583,6 @@ def main() -> int:
             return 0
         if args.paste:
             paste_login()
-            return 0
-        if args.browser:
-            browser_login(args.port)
             return 0
         credential_login(args.email)
         return 0

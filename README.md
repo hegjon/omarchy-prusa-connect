@@ -74,14 +74,12 @@ tells you if the wrong one was pasted.
 
 ### Why not a browser sign-in flow
 
-`prusa-connect-login --browser` implements the standard OAuth flow with a
-loopback redirect. Prusa currently rejects it with `invalid_request —
-Mismatching redirect URI`, because no loopback address is registered for their
-client; the only registered redirect is Connect's own callback, which is what
-the default flow uses. The code is kept for the day that changes.
-
-The OAuth password grant is also closed: `account.prusa3d.com` answers every
-credential combination with `invalid_grant`.
+Prusa registers no loopback or custom-scheme redirect for its OAuth client —
+only Connect's own callback — so a standard desktop OAuth flow answers
+`invalid_request — Mismatching redirect URI`. The OAuth password grant is also
+closed: `account.prusa3d.com` answers every credential combination with
+`invalid_grant`. Driving the sign-in form is what is left, and it is what the
+mobile app does.
 
 ### Staying signed in
 
