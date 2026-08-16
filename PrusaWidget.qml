@@ -603,8 +603,8 @@ Panel {
                   var bed = root.formatTemp(printerEntry.modelData.temps.bed)
                   if (printerEntry.modelData.temps.bedTarget > 0)
                     bed += "/" + root.formatTemp(printerEntry.modelData.temps.bedTarget)
-                  bits.push("N " + nozzle)
-                  bits.push("B " + bed)
+                  bits.push("Nozzle " + nozzle)
+                  bits.push("Heatbed " + bed)
                 }
                 // Only worth naming tools when there is more than one.
                 if (printerEntry.modelData.tools && printerEntry.modelData.tools.length > 1)
