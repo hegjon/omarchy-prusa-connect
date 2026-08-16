@@ -173,6 +173,22 @@ Panel {
     })
   }
 
+  // How often to poll. The panel being open is the strongest signal that
+  // someone is looking, so that wins. Otherwise it depends on whether anything
+  // is actually printing: progress moves minute to minute, and a five-minute
+  // background cadence leaves the bar visibly behind the printer's own display.
+  // An idle fleet does not change, so polling it every minute would be 1400
+  // requests a day to learn nothing.
+  //
+  // Capped by watchIntervalSec rather than overriding it, so lowering that
+  // setting still takes effect while raising it does not slow down a live print.
+  readonly property int activePollMs: 60000
+  readonly property int pollIntervalMs: {
+    if (opened) return refreshIntervalMs
+    if (fleet.printing > 0) return Math.min(watchIntervalMs, activePollMs)
+    return watchIntervalMs
+  }
+
   // Re-evaluated on a timer: a binding on Date.now() alone would never update,
   // because nothing notifies it that time has passed.
   property real nowMs: 0
@@ -185,8 +201,7 @@ Panel {
   // than something wrong. Three, so one missed poll does not blank the bar.
   readonly property bool dataIsStale: {
     if (lastUpdatedAt <= 0) return true
-    var pollMs = opened ? refreshIntervalMs : watchIntervalMs
-    return (nowMs - lastUpdatedAt) > pollMs * 3
+    return (nowMs - lastUpdatedAt) > pollIntervalMs * 3
   }
 
   // BarIconButton is a fixed one-slot glyph holder — it pins its width to
@@ -355,9 +370,7 @@ Panel {
   }
 
   Timer {
-    // Poll faster while the panel is open; fall back to the background cadence
-    // so the bar summary and notifications stay live without hammering Connect.
-    interval: root.opened ? root.refreshIntervalMs : root.watchIntervalMs
+    interval: root.pollIntervalMs
     running: root.opened || root.watchEnabled
     repeat: true
     triggeredOnStart: true

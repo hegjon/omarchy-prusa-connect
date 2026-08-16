@@ -109,12 +109,25 @@ Settings appear in the Omarchy bar widget settings.
 | Hide idle and offline printers | disabled | Show only printers doing something |
 | Refresh interval while the panel is open | `30` s | From 10 to 300 |
 | Keep polling in the background | enabled | Needed for the bar summary and notifications |
-| Background poll interval | `300` s | From 60 to 3600 |
+| Background poll interval | `300` s | From 60 to 3600. Automatically drops to 60 s while a printer is actually printing |
 | Notify when a print finishes | enabled | |
 | Notify when a printer needs attention | enabled | |
 | Notify on printer errors | enabled | |
 | Re-notify cooldown | `10` min | Minimum gap before the same printer notifies again |
 | Celsius | enabled | Off shows Fahrenheit |
+
+Polling adapts to what the fleet is doing: every 60 s while something is
+printing, since progress moves minute to minute and the bar should not sit
+visibly behind the printer's own display, and every `watchIntervalSec` otherwise,
+since an idle fleet does not change and polling it hard learns nothing. Opening
+the panel polls at `refreshIntervalSec` regardless. Lowering `watchIntervalSec`
+below 60 s still applies during a print; raising it does not slow one down.
+
+If a poll fails, the panel keeps showing the last known fleet with the age in
+its footer, but the bar stops showing a progress percentage or an attention
+badge once the data is older than three polls — an unqualified "61%" in the bar
+has no way to say it might be stale. The tooltip reports the age instead, and
+failures are logged (`journalctl --user | grep "prusa-connect: poll failed"`).
 
 Notifications fire on a *transition*, so a printer sitting in ATTENTION across
 many polls notifies once rather than every poll. Nothing is announced on the
