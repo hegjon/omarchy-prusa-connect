@@ -48,7 +48,7 @@ TOKEN_URL = f"https://{ACCOUNT_HOST}/o/token/"
 CONNECT_REDIRECT_URI = "https://connect.prusa3d.com/login/auth-callback"
 # The scope Connect's own web token carries, read from its JWT claims.
 SCOPE = "basic_info user_operations email_lists openid connect"
-USER_AGENT = "omarchy-prusa-connect/0.1.0"
+USER_AGENT = "omarchy-prusa-connect/0.3.0"
 
 STATE_DIR = os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
