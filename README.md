@@ -223,7 +223,7 @@ files with the hash stripped.
 ## Licence
 
 MIT, **except** the printer illustrations in `assets/printers/`, which belong to
-Prusa Research a.s. and are not covered by it. See
+Prusa Research a.s. and are not covered by it — see [`NOTICE`](NOTICE) and
 [`assets/printers/NOTICE`](assets/printers/NOTICE) for provenance and the terms
 they are included under. Deleting that directory costs nothing but the
 illustrations: the panel falls back to generic status glyphs.
