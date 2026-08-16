@@ -565,7 +565,7 @@ def main() -> int:
                        help="remove stored credentials")
     parser.add_argument("--email", help="Prusa account email (asked for if omitted)")
     parser.add_argument("--debug", action="store_true",
-                        help="print request shape and raw responses to stderr")
+                        help="print request shape (never credentials or tokens) to stderr")
     args = parser.parse_args()
 
     global DEBUG

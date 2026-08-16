@@ -118,7 +118,7 @@ Settings appear in the Omarchy bar widget settings.
 | Setting | Default | Description |
 | --- | --- | --- |
 | Show print progress on the bar icon | enabled | Replaces the icon with a percentage while one printer is running |
-| Hide idle and offline printers | disabled | Show only printers doing something |
+| Hide idle and offline printers from the panel | disabled | Show only printers doing something |
 | Refresh interval while the panel is open | `30` s | From 10 to 300 |
 | Keep polling in the background | enabled | Needed for the bar summary and notifications |
 | Background poll interval | `60` s | From 60 to 3600. Used when nothing is printing |
@@ -141,9 +141,11 @@ error rather than hiding it, and raising `printingIntervalSec` is the fix.
 
 If a poll fails, the panel keeps showing the last known fleet with the age in
 its footer, but the bar stops showing a progress percentage or an attention
-badge once the data is older than three polls — an unqualified "61%" in the bar
-has no way to say it might be stale. The tooltip reports the age instead, and
-failures are logged (`journalctl --user | grep "prusa-connect: poll failed"`).
+badge once the data is older than three polls (and never sooner than 30 s, so
+one slow response at the 5 s printing cadence does not blank it) — an
+unqualified "61%" in the bar has no way to say it might be stale. The tooltip
+reports the age instead, and failures are logged
+(`journalctl --user | grep "prusa-connect: poll failed"`).
 
 Notifications fire on a *transition*, so a printer sitting in ATTENTION across
 many polls notifies once rather than every poll. Nothing is announced on the
@@ -272,10 +274,14 @@ therefore sends an explicit `User-Agent`.
 
 ```bash
 ./test/test-normalize    # response normalization, against fixtures
+./test/test-manifest     # manifest.json against the rules the shell enforces
 ./test/lint              # qmllint over the QML
+omarchy plugin validate .   # the shell's own check, on an Omarchy machine
 ```
 
-Neither involves credentials or network access.
+None of them involves credentials or network access. CI runs the first two
+plus `shellcheck` over the shell scripts; `test/lint` needs the Omarchy shell's
+QML modules, so it stays local.
 
 `qmllint` ships with `qt6-declarative`, which Quickshell already depends on, but
 it lives in Qt's versioned bin directory (`/usr/lib/qt6/bin/qmllint`) rather than
@@ -290,7 +296,8 @@ else, particularly `[unqualified]`, is a real finding.
 
 `test/fixtures/printers.json` is a real Connect response with identifying
 details replaced, as is `test/fixtures/printing.json`, captured from a printer
-mid-job.
+mid-job. `test/fixtures/attention.json` is hand-written: boundary cases for the
+`needsAttention` rule.
 
 Two things that fixture pins down, both of which would be easy to get wrong:
 `job_info.progress` is a **percentage**, not a fraction — the capture reads

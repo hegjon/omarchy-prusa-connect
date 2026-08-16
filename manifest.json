@@ -44,7 +44,7 @@
       {
         "key": "showBarSummary",
         "type": "boolean",
-        "label": "Show a fleet summary next to the bar icon",
+        "label": "Show print progress on the bar icon",
         "defaultValue": true
       },
       {
