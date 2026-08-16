@@ -40,8 +40,9 @@ def tools_of:
 # cost nothing and Connect's APIs are not documented.
 #
 # progress is a PERCENTAGE, not a fraction: the captured sample reads 1.0 while
-# weight_remaining is still 99% of model_weight. Passing it through unscaled is
-# therefore correct, and scaling it by 100 would be wrong by 100x.
+# weight_remaining is still 99% of model_weight, and later in the same print
+# Connect reported 3.0 while the printer's own display read 3%. Passing it
+# through unscaled is therefore correct; scaling it would be wrong by 100x.
 def job_of:
   (.job_info // .job // null)
   | if . == null or (type != "object") then null

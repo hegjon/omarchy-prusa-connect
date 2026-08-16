@@ -1,5 +1,5 @@
 {
-  "_comment": "A real Prusa Connect response captured from a printer mid-job on 2026-08-16, with identifying details replaced. Confirms the job_info field names: display_name, progress, time_remaining, time_printing. progress is a PERCENTAGE (0-100), not a fraction — this capture reads 1.0 while weight_remaining is still 99% of model_weight. time_remaining is 0 because the printer had not computed an estimate 117 seconds in, not because the print was about to finish.",
+  "_comment": "A real Prusa Connect response captured from a printer mid-job on 2026-08-16, with identifying details replaced. Confirms the job_info field names: display_name, progress, time_remaining, time_printing. progress is a PERCENTAGE (0-100), not a fraction — this capture reads 1.0 while weight_remaining is still 99% of model_weight, and later in the same print Connect reported 3.0 while the printer's own display read 3%. time_remaining is 0 because the printer had not computed an estimate 117 seconds in, not because the print was about to finish.",
   "printers": [
     {
       "printer_model": "MK4IS",
