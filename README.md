@@ -189,14 +189,19 @@ A finished printer shows a **Set ready** button, matching Connect's own "Set
 ready!". It is offered only where it applies: the job has finished, Connect can
 reach the printer, and the account has write rights on it.
 
-It always confirms first, and the prompt asks about the machine rather than
-about the click:
+It always confirms first, with a checklist rather than a single question:
 
-> Is the printer ready? Is the print sheet in place, empty and clean?
+> - Is the print sheet in place?
+> - Is the print sheet empty?
+> - Is the print sheet clean?
+
+**Set ready** stays disabled until all three are ticked. They are separate
+points because each is a separate thing to walk over and look at, and one
+combined "yes" invites skimming all three.
 
 That is the point of the command. Marking a printer ready tells the fleet it can
 accept another job, so a queued job could start printing onto whatever is still
-on the sheet. The question worth answering is a physical one.
+on the sheet. The questions worth answering are physical ones.
 
 The command goes to Prusa's mobile API (`PUT /api/v1/printers/{uuid}/command/ready`),
 which documents it and accepts the same account token the fleet is read with.

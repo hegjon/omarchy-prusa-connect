@@ -33,6 +33,13 @@ Panel {
   property var readyCandidate: null
   property string commandError: ""
 
+  // Each point of the sheet checklist, cleared whenever the prompt opens so a
+  // previous answer can never carry over to another printer.
+  property bool sheetInPlace: false
+  property bool sheetEmpty: false
+  property bool sheetClean: false
+  readonly property bool sheetChecklistComplete: sheetInPlace && sheetEmpty && sheetClean
+
   // Notification bookkeeping, keyed by printer uuid: what each printer looked
   // like last poll, so only genuine transitions announce themselves.
   property var lastSeenById: ({})
@@ -363,11 +370,17 @@ Panel {
   // API call.
   function askSetReady(printer) {
     commandError = ""
+    sheetInPlace = false
+    sheetEmpty = false
+    sheetClean = false
     readyCandidate = printer
   }
 
   function sendSetReady() {
     if (!readyCandidate || !readyCandidate.uuid) return
+    // Belt and braces: the button is disabled without this, but nothing should
+    // be able to send the command with the checklist unanswered.
+    if (!sheetChecklistComplete) return
     commandProcess.running = false
     commandProcess.command = [commandPath, "ready", String(readyCandidate.uuid)]
     commandProcess.running = true
@@ -514,27 +527,120 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: fleetPanel.fittedContentWidth(Style.space(420))
-    contentHeight: fleetPanel.fittedContentHeight(column.implicitHeight, Style.space(620))
+    // The prompt is taller than a short fleet list, so the panel has to grow to
+    // contain it — otherwise the dialog spills past the panel's own border.
+    // Safe from a binding loop: the dialog's height depends on the panel's
+    // width, never on its height.
+    contentHeight: fleetPanel.fittedContentHeight(
+      root.readyCandidate !== null
+        ? Math.max(column.implicitHeight, dialogColumn.implicitHeight + Style.space(36))
+        : column.implicitHeight,
+      Style.space(620))
 
     // The prompt asks about the machine, not the request. Marking a printer
     // ready lets a queued job start, so the thing worth checking is whether the
     // sheet is actually clear — not whether the user meant to click.
-    ConfirmDialog {
+    // A checklist rather than one question. Each point is a separate thing to
+    // look at, and a single "yes" invites skimming all three. Confirm stays
+    // disabled until every box is ticked, so the list has to be answered rather
+    // than acknowledged.
+    Item {
       anchors.fill: parent
       z: 10
-      opened: root.readyCandidate !== null
-      message: root.readyCandidate
-        ? "Set " + root.readyCandidate.name + " ready?\n\n"
-          + "Is the printer ready? Is the print sheet in place, empty and clean?"
-        : ""
-      confirmText: "Set ready"
-      cancelText: "Cancel"
-      background: Color.popups.background
-      foreground: Color.popups.text
-      fontFamily: Style.font.family
+      visible: root.readyCandidate !== null
 
-      onConfirmed: root.sendSetReady()
-      onCanceled: root.readyCandidate = null
+      // Swallow clicks so the panel behind cannot be operated while the prompt
+      // is up, and so a stray click outside the card does nothing.
+      MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        onClicked: {}
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(Color.popups.background.r, Color.popups.background.g,
+                       Color.popups.background.b, 0.85)
+      }
+
+      Rectangle {
+        anchors.centerIn: parent
+        width: Math.min(parent.width - Style.space(16), Style.space(340))
+        height: dialogColumn.implicitHeight + Style.space(28)
+        color: Color.popups.background
+        radius: Style.cornerRadius
+        border.width: Math.max(1, Style.space(2))
+        border.color: Color.popups.border
+
+        Column {
+          id: dialogColumn
+          anchors.centerIn: parent
+          width: parent.width - Style.space(28)
+          spacing: Style.space(8)
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root.readyCandidate
+              ? "Set " + root.readyCandidate.name + " ready?" : ""
+            color: Color.popups.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            font.bold: true
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "A ready printer can be given the next job, so anything left "
+              + "on the sheet would be printed onto."
+            color: root.detailColor
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Is the print sheet in place?"
+            checked: root.sheetInPlace
+            onClicked: root.sheetInPlace = !root.sheetInPlace
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Is the print sheet empty?"
+            checked: root.sheetEmpty
+            onClicked: root.sheetEmpty = !root.sheetEmpty
+          }
+
+          Toggle {
+            width: parent.width
+            label: "Is the print sheet clean?"
+            checked: root.sheetClean
+            onClicked: root.sheetClean = !root.sheetClean
+          }
+
+          Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Style.space(8)
+
+            Button {
+              text: "Cancel"
+              bordered: true
+              onClicked: root.readyCandidate = null
+            }
+
+            Button {
+              text: "Set ready"
+              bordered: true
+              enabled: root.sheetChecklistComplete
+              opacity: enabled ? 1.0 : 0.4
+              accent: Color.urgent
+              onClicked: root.sendSetReady()
+            }
+          }
+        }
+      }
     }
 
     PanelKeyCatcher {
