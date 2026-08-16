@@ -141,9 +141,11 @@ first poll after the shell starts — the widget waking up is not an event.
 
 ### What counts as needing attention
 
-The reason shown is the dialog's title and its explanatory text together.
-Connect splits them — "Warning" over "Bed leveling failed…" — and either half
-alone can be useless, so notifications and the panel both use both.
+Connect splits a dialog into a short title and the explanation under it —
+"Warning" over "Bed leveling failed…". The notification carries both, since
+the title alone often says nothing. The panel shows one elided line, because a
+fleet overview should stay scannable and a wrapped three-line dialog pushes
+every other printer down the list.
 
 A printer wants a human when it reports `ATTENTION` or `ERROR`, **or** when it
 has an unanswered dialog on its screen — a printer can sit in `FINISHED` with a

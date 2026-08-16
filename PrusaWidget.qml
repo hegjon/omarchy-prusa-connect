@@ -134,6 +134,16 @@ Panel {
   // Connect splits a printer dialog into a short title and the explanation
   // under it — "Warning" over "Bed leveling failed…". Either half alone can be
   // useless, so both are used wherever the reason is shown.
+  // One line for the list. The full explanation goes to the notification, which
+  // has room for it; a fleet overview should stay scannable, and a wrapped
+  // three-line dialog pushes every other printer down the panel.
+  function attentionSummary(printer) {
+    if (!printer.attention) return ""
+    var title = printer.attention.title || ""
+    if (title !== "") return title
+    return printer.attention.text || ""
+  }
+
   function attentionText(printer) {
     if (!printer.attention) return "Needs attention"
     var title = printer.attention.title || ""
@@ -873,10 +883,10 @@ Panel {
             // Why the printer wants attention, straight from Connect's dialog.
             Text {
               width: parent.width
-              wrapMode: Text.WordWrap
+              elide: Text.ElideRight
               visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
               text: printerEntry.modelData.attention
-                ? root.attentionText(printerEntry.modelData) : ""
+                ? root.attentionSummary(printerEntry.modelData) : ""
               color: Color.urgent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
