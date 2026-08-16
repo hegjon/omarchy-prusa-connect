@@ -33,6 +33,11 @@ Panel {
   property var readyCandidate: null
   property string commandError: ""
 
+  // Remaining quick polls after a command. Connect accepts the request before
+  // the fleet reflects it, so a single refresh on completion usually still
+  // reads the old state.
+  property int settleTicks: 0
+
   // Each point of the sheet checklist, cleared whenever the prompt opens so a
   // previous answer can never carry over to another printer.
   property bool sheetInPlace: false
@@ -422,7 +427,11 @@ Panel {
       } else {
         root.commandError = ""
       }
-      // Whatever happened, the fleet has probably moved on.
+      // Whatever happened, the fleet has probably moved on. One refresh is not
+      // enough: the command returns before Connect has the new state, so follow
+      // it with a short burst rather than leaving the panel stale until the next
+      // scheduled poll — up to a minute away on an idle fleet.
+      root.settleTicks = 8
       root.refresh()
     }
   }
@@ -463,6 +472,18 @@ Panel {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refresh()
+  }
+
+  Timer {
+    // The post-command burst: every two seconds for about a quarter of a
+    // minute, then back to the normal cadence.
+    interval: 2000
+    running: root.settleTicks > 0
+    repeat: true
+    onTriggered: {
+      root.settleTicks -= 1
+      root.refresh()
+    }
   }
 
   Timer {

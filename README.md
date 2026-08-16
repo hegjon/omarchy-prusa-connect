@@ -207,6 +207,11 @@ That is the point of the command. Marking a printer ready tells the fleet it can
 accept another job, so a queued job could start printing onto whatever is still
 on the sheet. The questions worth answering are physical ones.
 
+Connect accepts the command before its fleet data reflects it, so the panel
+polls every two seconds for about fifteen seconds afterwards. Without that the
+row would keep reading `Finished` until the next scheduled poll, up to a minute
+later on an idle fleet.
+
 The command goes to Prusa's mobile API (`PUT /api/v1/printers/{uuid}/command/ready`),
 which documents it and accepts the same account token the fleet is read with.
 Connect's web app uses an unpublished endpoint that would have to be
