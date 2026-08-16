@@ -498,54 +498,67 @@ Panel {
             required property var modelData
 
             width: column.width
-            spacing: Style.space(2)
+            spacing: Style.space(6)
 
-            // Detail lines align under the name rather than under the icon.
-            readonly property real detailIndent: stateIcon.implicitWidth + Style.space(8)
-
-            // Status icon, name and state on one line.
             Row {
               width: parent.width
-              spacing: Style.space(8)
+              spacing: Style.space(10)
 
-              Text {
-                id: stateIcon
+              // Prusa's own illustration of this model. Bundled rather than
+              // fetched; see assets/printers/NOTICE. An unrecognised model has
+              // no file, so fall back to the generic printer rather than a gap.
+              Image {
+                id: printerArt
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.glyphForPrinter(printerEntry.modelData)
-                color: root.colorForPrinter(printerEntry.modelData)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
+                width: Style.space(46)
+                height: Style.space(46)
+                sourceSize: Qt.size(width * 2, height * 2)
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                asynchronous: true
+                source: Qt.resolvedUrl("assets/printers/"
+                  + (printerEntry.modelData.assetKey || "unknown") + ".svg")
+                onStatusChanged: {
+                  if (status === Image.Error)
+                    source = Qt.resolvedUrl("assets/printers/unknown.svg")
+                }
               }
 
-              Text {
-                width: parent.width - stateIcon.implicitWidth
-                  - stateText.implicitWidth - Style.space(16)
-                elide: Text.ElideRight
-                text: printerEntry.modelData.name
-                color: Color.popups.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                font.bold: true
-              }
+              Column {
+                width: parent.width - printerArt.width - Style.space(10)
+                spacing: Style.space(2)
 
-              Text {
-                id: stateText
-                text: root.stateLabel(printerEntry.modelData.state)
-                  + (printerEntry.modelData.job && printerEntry.modelData.job.progress !== null
-                     ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
-                // Deliberately the state's own colour, not colorForPrinter: a
-                // finished print is not a problem just because a dialog is also
-                // waiting. The icon and the dialog line carry that urgency.
-                color: root.stateColor(printerEntry.modelData.state)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
+                Row {
+                  width: parent.width
+                  spacing: Style.space(8)
+
+                  Text {
+                    width: parent.width - stateText.implicitWidth - Style.space(8)
+                    elide: Text.ElideRight
+                    text: printerEntry.modelData.name
+                    color: Color.popups.text
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+
+                  Text {
+                    id: stateText
+                    text: root.stateLabel(printerEntry.modelData.state)
+                      + (printerEntry.modelData.job && printerEntry.modelData.job.progress !== null
+                         ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
+                    // Deliberately the state's own colour, not colorForPrinter: a
+                    // finished print is not a problem just because a dialog is also
+                    // waiting. The icon and the dialog line carry that urgency.
+                    color: root.stateColor(printerEntry.modelData.state)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
               }
             }
 
             // Current job, when one is running.
             Text {
-              width: parent.width - printerEntry.detailIndent
-              leftPadding: printerEntry.detailIndent
+              width: parent.width
               elide: Text.ElideRight
               visible: printerEntry.modelData.job !== null && printerEntry.modelData.job !== undefined
               text: {
@@ -563,8 +576,7 @@ Panel {
 
             // Why the printer wants attention, straight from Connect's dialog.
             Text {
-              width: parent.width - printerEntry.detailIndent
-              leftPadding: printerEntry.detailIndent
+              width: parent.width
               wrapMode: Text.WordWrap
               visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
               text: printerEntry.modelData.attention
@@ -577,8 +589,7 @@ Panel {
 
             // Temperatures for a live printer, or when it was last seen.
             Text {
-              width: parent.width - printerEntry.detailIndent
-              leftPadding: printerEntry.detailIndent
+              width: parent.width
               elide: Text.ElideRight
               text: {
                 if (!printerEntry.modelData.online)
@@ -605,6 +616,8 @@ Panel {
               color: root.detailColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
+            }
+              }
             }
 
             PanelSeparator { width: parent.width }

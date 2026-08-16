@@ -1,0 +1,30 @@
+Printer illustrations in this directory
+=======================================
+
+These SVG files are NOT covered by this plugin's MIT licence.
+
+They are product illustrations belonging to Prusa Research a.s., taken from the
+Prusa Connect web application at https://connect.prusa3d.com. They are included
+here so the plugin can show a recognisable illustration of each printer model
+alongside its status.
+
+No licence grant for redistribution has been identified. They are bundled on the
+understanding that this is a small, non-commercial, interoperability-oriented
+use that depicts Prusa's own products in a tool for Prusa's own customers, and
+that it is the kind of thing a rights holder would ask to have removed rather
+than litigate. If Prusa Research would prefer they not be redistributed, remove
+this directory and the plugin falls back to generic status glyphs with no loss
+of function — see stateGlyph() in PrusaWidget.qml.
+
+Trade marks, including the Prusa name and logo, belong to Prusa Research a.s.
+This plugin is not affiliated with, endorsed by, or supported by Prusa Research.
+
+Refreshing
+----------
+
+Run tools/fetch-printer-assets to re-download them. Connect's filenames carry a
+build hash that changes on every redeploy, so the script follows the app's own
+chunk graph to resolve current names rather than hardcoding URLs. Files are
+stored here with the hash stripped (mk4-shKwymuv.svg becomes mk4.svg).
+
+Retrieved 2026-08-16 from Connect build assets/main-DCVbc1ED.js — 39 files.

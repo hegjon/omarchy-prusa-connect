@@ -133,9 +133,15 @@ the summary count and the notification cannot drift apart.
 
 ## Panel
 
-Each printer shows a status icon, its name, state, current job with progress and
-ETA, and either live temperatures or when it was last seen. A printer asking for
-attention shows the text of the dialog waiting on its screen.
+Each printer shows an illustration of its model, its name, state, current job
+with progress and ETA, and either live temperatures or when it was last seen. A
+printer asking for attention shows the text of the dialog waiting on its screen.
+
+The illustrations are Prusa's own, bundled from Connect — see
+[`assets/printers/NOTICE`](assets/printers/NOTICE). The model is derived from
+Connect's model code and tool count, so an MK4IS shows an MK4 (Input Shaper is
+firmware, not a different chassis) and a two-tool XL shows the two-tool XL. An
+unrecognised model falls back to a generic printer.
 
 Printers Connect cannot currently reach are listed last — their detail is stale
 by definition, so they are the least worth reading first. Everything else keeps
@@ -199,6 +205,24 @@ details replaced. `test/fixtures/printing.json` is synthetic: the job field
 names it uses have not yet been confirmed against a live printing printer, and
 `normalize.jq` deliberately accepts several spellings until they are.
 
+Printer illustrations are refreshed with:
+
+```bash
+./tools/fetch-printer-assets --dry-run   # list what would be downloaded
+./tools/fetch-printer-assets             # download into assets/printers/
+```
+
+Connect's asset filenames carry a build hash that changes on every redeploy, so
+the script follows the app's own chunk graph (`/login` → `index-<hash>.js` →
+`main-<hash>.js` → the SVG list) rather than hardcoding URLs, and stores the
+files with the hash stripped.
+
 ## Licence
 
-MIT.
+MIT, **except** the printer illustrations in `assets/printers/`, which belong to
+Prusa Research a.s. and are not covered by it. See
+[`assets/printers/NOTICE`](assets/printers/NOTICE) for provenance and the terms
+they are included under. Deleting that directory costs nothing but the
+illustrations: the panel falls back to generic status glyphs.
+
+This plugin is not affiliated with, endorsed by, or supported by Prusa Research.

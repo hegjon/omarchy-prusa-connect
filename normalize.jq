@@ -57,11 +57,33 @@ def attention_of:
     else { title: (.title? // null), text: (.text? // null), code: (.code? // null) }
     end;
 
+# Which bundled illustration depicts this printer. The widget appends .svg and
+# falls back to unknown.svg when a key has no file, so an unrecognised model
+# degrades to a generic printer rather than a blank space.
+#
+# Connect derives its own artwork from a type enum plus flags for MMU and, on
+# the XL, tool count. Only the model code and the tool map are exposed over the
+# API, so this reconstructs what it can from those.
+def asset_key:
+  ((.printer_model // "") | ascii_downcase) as $model
+  | ((.tools // {}) | length) as $tool_count
+  | if $model == "" then "unknown"
+    else
+      # Input Shaper is a firmware trait, not a different chassis: MK4IS and MK4
+      # are the same machine to look at, so both use mk4.svg.
+      ($model | sub("is$"; "")) as $base
+      | if ($base | startswith("xl")) then
+          (if $tool_count > 1 then "xlmultitool" + ($tool_count | tostring) else "xl" end)
+        else $base
+        end
+    end;
+
 def printer_of:
   {
     uuid: (.uuid // null),
     name: (.name // .printer_type_name // "Printer"),
     model: (.printer_type_name // .printer_model // null),
+    assetKey: asset_key,
     location: (.location // null),
     team: (.team_name // null),
     firmware: (.firmware // null),

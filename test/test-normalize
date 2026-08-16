@@ -101,6 +101,36 @@ check "sorting does not lose or duplicate anyone" printers.json \
 check "summary counts are unaffected by ordering" printers.json \
   '.summary.total == 3 and .summary.online == 1 and .summary.offline == 2'
 
+# --- printer artwork ---------------------------------------------------------
+echo
+echo "artwork"
+# Input Shaper is firmware, not a different chassis: MK4IS looks like an MK4.
+check "MK4IS maps to the mk4 illustration" printers.json \
+  '(first(.printers[] | select(.name == "Workshop MK4")) | .assetKey == "mk4")'
+# The XL's artwork depends on how many tools it carries.
+check "a two-tool XL maps to the two-tool illustration" printers.json \
+  '(first(.printers[] | select(.name == "Studio XL")) | .assetKey == "xlmultitool2")'
+check "an unknown model falls back rather than erroring" attention.json \
+  '(.printers | map(.assetKey) | all(. != null and . != ""))'
+
+# Every key the normalizer emits must have a file, or the panel shows a gap.
+for key in $(jq -f "$NORMALIZE" <"$TEST_DIR/fixtures/printers.json" | jq -r '.printers[].assetKey'); do
+  if [[ -f "$PLUGIN_DIR/assets/printers/$key.svg" ]]; then
+    printf '  ok    %s.svg is bundled\n' "$key"
+    (( passed++ ))
+  else
+    printf '  FAIL  %s.svg is missing from assets/printers/\n' "$key"
+    (( failed++ ))
+  fi
+done
+if [[ -f "$PLUGIN_DIR/assets/printers/unknown.svg" ]]; then
+  printf '  ok    the unknown fallback is bundled\n'
+  (( passed++ ))
+else
+  printf '  FAIL  assets/printers/unknown.svg is missing\n'
+  (( failed++ ))
+fi
+
 # --- synthetic printing job -------------------------------------------------
 check "counts a printing printer" printing.json \
   '.summary.printing == 1'

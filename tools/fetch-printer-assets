@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# Refresh the bundled printer illustrations from Prusa Connect.
+#
+# Usage: tools/fetch-printer-assets [--dry-run]
+#
+# The artwork is Prusa Research's, taken from the Connect web app. See
+# assets/printers/NOTICE for provenance. This script exists so the assets can be
+# refreshed and their origin audited, rather than arriving as opaque binaries in
+# a commit.
+#
+# Connect's asset filenames carry a build hash (mk4-shKwymuv.svg) that changes on
+# every redeploy, so the names cannot be hardcoded. They are resolved by
+# following the app's own chunk graph:
+#
+#   /login  ->  assets/index-<hash>.js  ->  assets/main-<hash>.js  ->  *.svg
+#
+# Files are written without the hash (mk4.svg), which is what the widget expects.
+
+set -uo pipefail
+
+readonly TOOLS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly PLUGIN_DIR="$(dirname -- "$TOOLS_DIR")"
+readonly ASSET_DIR="$PLUGIN_DIR/assets/printers"
+readonly BASE="https://connect.prusa3d.com"
+
+DRY_RUN=0
+[[ ${1:-} == --dry-run ]] && DRY_RUN=1
+
+die() { echo "fetch-printer-assets: $*" >&2; exit 1; }
+command -v curl >/dev/null || die "curl is required"
+
+fetch() { curl -fsS -m 60 "$1"; }
+
+echo "==> resolving Connect's asset graph"
+login_html=$(fetch "$BASE/login") || die "could not fetch $BASE/login"
+
+index_js=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' <<<"$login_html" | head -1)
+[[ -n $index_js ]] || die "no index chunk found — Connect's build layout may have changed"
+echo "    $index_js"
+
+index_src=$(fetch "$BASE/$index_js") || die "could not fetch $index_js"
+
+main_js=$(grep -oE 'assets/main-[A-Za-z0-9_-]+\.js' <<<"$index_src" | head -1)
+[[ -n $main_js ]] || die "no main chunk found — Connect's build layout may have changed"
+echo "    $main_js"
+
+main_src=$(fetch "$BASE/$main_js") || die "could not fetch $main_js"
+
+mapfile -t assets < <(grep -oE 'assets/[a-z0-9_]+-[A-Za-z0-9_-]{6,}\.svg' <<<"$main_src" | sort -u)
+(( ${#assets[@]} > 0 )) || die "no printer SVGs found in $main_js"
+
+# Loading spinners and similar live alongside the printer art; keep only the
+# printer illustrations.
+keep=()
+for asset in "${assets[@]}"; do
+  name=${asset##*/}
+  case "$name" in
+    loading-*|spinner-*) continue ;;
+  esac
+  keep+=("$asset")
+done
+
+echo "==> ${#keep[@]} printer illustrations"
+if (( DRY_RUN )); then
+  printf '    %s\n' "${keep[@]##*/}"
+  exit 0
+fi
+
+mkdir -p "$ASSET_DIR" || die "could not create $ASSET_DIR"
+
+downloaded=0
+failed=0
+for asset in "${keep[@]}"; do
+  name=${asset##*/}
+  # Strip the build hash: mk4-shKwymuv.svg -> mk4.svg
+  stable=$(sed -E 's/-[A-Za-z0-9_-]{6,}\.svg$/.svg/' <<<"$name")
+  if fetch "$BASE/$asset" >"$ASSET_DIR/$stable.tmp" 2>/dev/null &&
+     [[ -s "$ASSET_DIR/$stable.tmp" ]]; then
+    mv -f "$ASSET_DIR/$stable.tmp" "$ASSET_DIR/$stable"
+    (( downloaded++ ))
+  else
+    rm -f "$ASSET_DIR/$stable.tmp"
+    echo "    FAILED $stable" >&2
+    (( failed++ ))
+  fi
+done
+
+echo "==> $downloaded written to assets/printers/, $failed failed"
+du -sh "$ASSET_DIR" 2>/dev/null | sed 's/^/    /'
+(( failed == 0 ))
