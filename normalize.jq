@@ -64,6 +64,14 @@ def job_of:
       # 228. Rendering either as an ETA would be a lie ("ETA 0s" claims the job
       # is about to finish), so anything non-positive is unknown and the panel
       # omits the ETA. A print genuinely at zero flips to FINISHED within a poll.
+      #
+      # Positive values pass through untouched, including ones that look wrong.
+      # On short prints an MK4 was observed reporting exactly 60 for the whole
+      # job — unchanged at 4%, 15%, 39% and through a fourteen-minute stall, and
+      # identical across jobs whose slicer estimates were 45 s and 2 min. That
+      # may be a floor rather than an estimate, and may well be meaningful on a
+      # long print. Reporting what Connect says is the honest default, and it
+      # means any fix on their side arrives for free.
       | if (.remaining != null and .remaining <= 0) then .remaining = null else . end
       | if (.id == null and .name == null and .progress == null) then null else . end
     end;

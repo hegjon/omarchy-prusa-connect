@@ -141,6 +141,10 @@ first poll after the shell starts — the widget waking up is not an event.
 
 ### What counts as needing attention
 
+The reason shown is the dialog's title and its explanatory text together.
+Connect splits them — "Warning" over "Bed leveling failed…" — and either half
+alone can be useless, so notifications and the panel both use both.
+
 A printer wants a human when it reports `ATTENTION` or `ERROR`, **or** when it
 has an unanswered dialog on its screen — a printer can sit in `FINISHED` with a
 dialog waiting, which is easy to miss. Either lights a count badge on the bar

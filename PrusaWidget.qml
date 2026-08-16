@@ -126,6 +126,17 @@ Panel {
     return stateLabel(printer.state)
   }
 
+  // Connect splits a printer dialog into a short title and the explanation
+  // under it — "Warning" over "Bed leveling failed…". Either half alone can be
+  // useless, so both are used wherever the reason is shown.
+  function attentionText(printer) {
+    if (!printer.attention) return "Needs attention"
+    var title = printer.attention.title || ""
+    var body = printer.attention.text || ""
+    if (title !== "" && body !== "" && title !== body) return title + "\n" + body
+    return title !== "" ? title : (body !== "" ? body : "Needs attention")
+  }
+
   // A printer with an unanswered dialog reads as wanting a human even when its
   // state says FINISHED, so the icon and its colour follow needsAttention rather
   // than the state alone — the same rule as the bar badge and the notification.
@@ -313,8 +324,7 @@ Panel {
     // checked before FINISHED: if a print completes and leaves a dialog on the
     // screen in the same poll, the dialog is the more actionable of the two.
     if (notifyAttention && printer.needsAttention && !previous.needsAttention) {
-      var detail = printer.attention && printer.attention.title
-        ? printer.attention.title : "Needs attention"
+      var detail = root.attentionText(printer)
       return { urgency: "critical", body: detail }
     }
 
@@ -845,8 +855,7 @@ Panel {
               wrapMode: Text.WordWrap
               visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
               text: printerEntry.modelData.attention
-                ? (printerEntry.modelData.attention.title || printerEntry.modelData.attention.text || "")
-                : ""
+                ? root.attentionText(printerEntry.modelData) : ""
               color: Color.urgent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
