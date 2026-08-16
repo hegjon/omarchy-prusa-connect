@@ -117,12 +117,24 @@ Panel {
     return stateColor(printer.state)
   }
 
+  // Secondary text. The `muted` theme token is not a text colour: a theme is
+  // free to set it near the background, and this one does — #333333 on a
+  // #121212 panel measured 1.18:1 on screen, against the 4.5:1 body text wants.
+  // Dimming the readable popup foreground instead degrades gracefully in any
+  // theme, which is what the first-party panels do.
+  //
+  // They dim to 0.6; this uses 0.75 because these lines are caption-sized, where
+  // 0.6 measured 3.43:1 — fine for large text, short for small. 0.75 measures
+  // 4.86:1 and still reads as clearly secondary next to the printer names.
+  readonly property color detailColor:
+    Qt.rgba(Color.popups.text.r, Color.popups.text.g, Color.popups.text.b, 0.75)
+
   function stateColor(state) {
     switch (state) {
       case "ERROR":
       case "ATTENTION": return Color.urgent
       case "PRINTING": return Color.accent
-      case "OFFLINE": return Color.muted
+      case "OFFLINE": return detailColor
       default: return Color.popups.text
     }
   }
@@ -441,7 +453,7 @@ Panel {
             width: parent.width
             wrapMode: Text.WordWrap
             text: "Run prusa-connect-login in a terminal to sign in."
-            color: Color.muted
+            color: root.detailColor
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -461,7 +473,7 @@ Panel {
           width: parent.width
           visible: !root.initialized && root.lastError === ""
           text: "Loading…"
-          color: Color.muted
+          color: root.detailColor
           font.family: Style.font.family
           font.pixelSize: Style.font.body
         }
@@ -472,7 +484,7 @@ Panel {
           text: root.printers.length === 0
             ? "No printers in this Prusa Connect account."
             : "All printers are idle or offline."
-          color: Color.muted
+          color: root.detailColor
           font.family: Style.font.family
           font.pixelSize: Style.font.body
         }
@@ -544,7 +556,7 @@ Panel {
                 if (remaining !== "") parts.push("ETA " + remaining)
                 return parts.join("  ·  ")
               }
-              color: Color.muted
+              color: root.detailColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
             }
@@ -590,7 +602,7 @@ Panel {
                   bits.push(printerEntry.modelData.material)
                 return bits.join("   ")
               }
-              color: Color.muted
+              color: root.detailColor
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
             }
@@ -606,7 +618,7 @@ Panel {
             : (root.lastUpdatedAt > 0
                ? "Updated " + root.formatAgo(root.lastUpdatedAt / 1000) + "   ·   R to refresh"
                : "")
-          color: Color.muted
+          color: root.detailColor
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
         }
