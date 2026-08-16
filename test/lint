@@ -45,8 +45,8 @@ ln -sfn "$SHELL_ROOT" "$import_root/qs"
 
 status=0
 shopt -s nullglob
-for qml in "$PLUGIN_DIR"/*.qml; do
-  echo "qmllint $(basename "$qml")"
+for qml in "$PLUGIN_DIR"/*.qml "$PLUGIN_DIR"/components/*.qml; do
+  echo "qmllint ${qml#"$PLUGIN_DIR"/}"
   output=$("$QMLLINT" -I "$QML_ROOT" -I "$import_root" "$qml" 2>&1)
 
   # Drop the two expected classes, then report whatever is left.

@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "./components"
 
 // Bar widget and popup for a Prusa Connect printer fleet.
 //
@@ -42,13 +43,6 @@ Panel {
   // disabled until the fleet catches up, so the command cannot be sent twice
   // during the seconds when the row still says Finished.
   property string commandingUuid: ""
-
-  // Each point of the sheet checklist, cleared whenever the prompt opens so a
-  // previous answer can never carry over to another printer.
-  property bool sheetInPlace: false
-  property bool sheetEmpty: false
-  property bool sheetClean: false
-  readonly property bool sheetChecklistComplete: sheetInPlace && sheetEmpty && sheetClean
 
   // Notification bookkeeping, keyed by printer uuid: what each printer looked
   // like last poll, so only genuine transitions announce themselves.
@@ -411,17 +405,13 @@ Panel {
   // API call.
   function askSetReady(printer) {
     commandError = ""
-    sheetInPlace = false
-    sheetEmpty = false
-    sheetClean = false
     readyCandidate = printer
   }
 
+  // Called by the dialog once its checklist is complete; the checklist itself
+  // lives in SetReadyDialog so it resets with every printer offered.
   function sendSetReady() {
     if (!readyCandidate || !readyCandidate.uuid) return
-    // Belt and braces: the button is disabled without this, but nothing should
-    // be able to send the command with the checklist unanswered.
-    if (!sheetChecklistComplete) return
     commandProcess.running = false
     commandingUuid = String(readyCandidate.uuid)
     commandProcess.command = [commandPath, "ready", String(readyCandidate.uuid)]
@@ -601,114 +591,18 @@ Panel {
     // width, never on its height.
     contentHeight: fleetPanel.fittedContentHeight(
       root.readyCandidate !== null
-        ? Math.max(column.implicitHeight, dialogColumn.implicitHeight + Style.space(36))
+        ? Math.max(column.implicitHeight, readyDialog.cardContentHeight + Style.space(36))
         : column.implicitHeight,
       Style.space(620))
 
-    // The prompt asks about the machine, not the request. Marking a printer
-    // ready lets a queued job start, so the thing worth checking is whether the
-    // sheet is actually clear — not whether the user meant to click.
-    // A checklist rather than one question. Each point is a separate thing to
-    // look at, and a single "yes" invites skimming all three. Confirm stays
-    // disabled until every box is ticked, so the list has to be answered rather
-    // than acknowledged.
-    Item {
+    SetReadyDialog {
+      id: readyDialog
       anchors.fill: parent
       z: 10
-      visible: root.readyCandidate !== null
-
-      // Swallow clicks so the panel behind cannot be operated while the prompt
-      // is up, and so a stray click outside the card does nothing.
-      MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: {}
-      }
-
-      Rectangle {
-        anchors.fill: parent
-        color: Qt.rgba(Color.popups.background.r, Color.popups.background.g,
-                       Color.popups.background.b, 0.85)
-      }
-
-      Rectangle {
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(16), Style.space(340))
-        height: dialogColumn.implicitHeight + Style.space(28)
-        color: Color.popups.background
-        radius: Style.cornerRadius
-        border.width: Math.max(1, Style.space(2))
-        border.color: Color.popups.border
-
-        Column {
-          id: dialogColumn
-          anchors.centerIn: parent
-          width: parent.width - Style.space(28)
-          spacing: Style.space(8)
-
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: root.readyCandidate
-              ? "Set " + root.readyCandidate.name + " ready?" : ""
-            color: Color.popups.text
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            font.bold: true
-          }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: "A ready printer can be given the next job, so anything left "
-              + "on the sheet would be printed onto."
-            color: root.detailColor
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-          }
-
-          Toggle {
-            width: parent.width
-            label: "Is the print sheet in place?"
-            checked: root.sheetInPlace
-            onClicked: root.sheetInPlace = !root.sheetInPlace
-          }
-
-          Toggle {
-            width: parent.width
-            label: "Is the print sheet empty?"
-            checked: root.sheetEmpty
-            onClicked: root.sheetEmpty = !root.sheetEmpty
-          }
-
-          Toggle {
-            width: parent.width
-            label: "Is the print sheet clean?"
-            checked: root.sheetClean
-            onClicked: root.sheetClean = !root.sheetClean
-          }
-
-          Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Style.space(8)
-
-            Button {
-              text: "Cancel"
-              bordered: true
-              onClicked: root.readyCandidate = null
-            }
-
-            Button {
-              text: "Set ready"
-              bordered: true
-              enabled: root.sheetChecklistComplete
-              opacity: enabled ? 1.0 : 0.4
-              accent: Color.urgent
-              onClicked: root.sendSetReady()
-            }
-          }
-        }
-      }
+      printer: root.readyCandidate
+      detailColor: root.detailColor
+      onConfirmed: root.sendSetReady()
+      onCancelled: root.readyCandidate = null
     }
 
     PanelKeyCatcher {
@@ -809,184 +703,16 @@ Panel {
         Repeater {
           model: root.visiblePrinters
 
-          Column {
+          PrinterRow {
             id: printerEntry
 
             required property var modelData
 
             width: column.width
-            spacing: Style.space(6)
-
-            Row {
-              width: parent.width
-              spacing: Style.space(10)
-
-              // Prusa's own illustration of this model. Bundled rather than
-              // fetched; see assets/printers/NOTICE. An unrecognised model has
-              // no file, so fall back to the generic printer rather than a gap.
-              Image {
-                id: printerArt
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(46)
-                height: Style.space(46)
-                sourceSize: Qt.size(width * 2, height * 2)
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                asynchronous: true
-                source: Qt.resolvedUrl("assets/printers/"
-                  + (printerEntry.modelData.assetKey || "unknown") + ".svg")
-                onStatusChanged: {
-                  if (status === Image.Error)
-                    source = Qt.resolvedUrl("assets/printers/unknown.svg")
-                }
-              }
-
-              Column {
-                width: parent.width - printerArt.width - Style.space(10)
-                spacing: Style.space(2)
-
-                Row {
-                  width: parent.width
-                  spacing: Style.space(8)
-
-                  Text {
-                    width: parent.width - stateText.implicitWidth - Style.space(8)
-                    elide: Text.ElideRight
-                    text: printerEntry.modelData.name
-                    color: Color.popups.text
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.body
-                    font.bold: true
-                  }
-
-                  Text {
-                    id: stateText
-                    text: root.labelForPrinter(printerEntry.modelData)
-                      + (!printerEntry.modelData.preparing
-                         && printerEntry.modelData.job
-                         && printerEntry.modelData.job.progress !== null
-                         ? "  " + Math.round(printerEntry.modelData.job.progress) + "%" : "")
-                    // Deliberately the state's own colour, not colorForPrinter: a
-                    // finished print is not a problem just because a dialog is also
-                    // waiting. The icon and the dialog line carry that urgency.
-                    color: root.stateColor(printerEntry.modelData.state)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.body
-              }
-            }
-
-            // Current job, when one is running. Filename and ETA are separate
-            // items rather than one joined string: sliced names run to 40-odd
-            // characters, and as a single elided Text the ETA — the half worth
-            // reading — was the part that got cut.
-            Row {
-              width: parent.width
-              spacing: Style.space(6)
-              visible: printerEntry.modelData.job !== null && printerEntry.modelData.job !== undefined
-
-              Text {
-                width: Math.max(0, parent.width - etaText.implicitWidth
-                  - (etaText.text === "" ? 0 : Style.space(6)))
-                elide: Text.ElideRight
-                text: printerEntry.modelData.job ? (printerEntry.modelData.job.name || "") : ""
-                color: root.detailColor
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
-
-              Text {
-                id: etaText
-                text: {
-                  if (!printerEntry.modelData.job) return ""
-                  var remaining = root.formatDuration(printerEntry.modelData.job.remaining)
-                  return remaining === "" ? "" : "ETA " + remaining
-                }
-                color: root.detailColor
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            // Why the printer wants attention, straight from Connect's dialog.
-            Text {
-              width: parent.width
-              elide: Text.ElideRight
-              visible: printerEntry.modelData.attention !== null && printerEntry.modelData.attention !== undefined
-              text: printerEntry.modelData.attention
-                ? root.attentionSummary(printerEntry.modelData) : ""
-              color: Color.urgent
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-
-            // Temperatures for a live printer, or when it was last seen.
-            Text {
-              width: parent.width
-              elide: Text.ElideRight
-              text: {
-                if (!printerEntry.modelData.online)
-                  return printerEntry.modelData.model + "  ·  last seen " + root.formatAgo(printerEntry.modelData.lastOnline)
-
-                var bits = []
-                if (printerEntry.modelData.temps) {
-                  var nozzle = root.formatTemp(printerEntry.modelData.temps.nozzle)
-                  if (printerEntry.modelData.temps.nozzleTarget > 0)
-                    nozzle += "/" + root.formatTemp(printerEntry.modelData.temps.nozzleTarget)
-                  var bed = root.formatTemp(printerEntry.modelData.temps.bed)
-                  if (printerEntry.modelData.temps.bedTarget > 0)
-                    bed += "/" + root.formatTemp(printerEntry.modelData.temps.bedTarget)
-                  bits.push("Nozzle " + nozzle)
-                  bits.push("Heatbed " + bed)
-                }
-                // Only worth naming tools when there is more than one.
-                if (printerEntry.modelData.tools && printerEntry.modelData.tools.length > 1)
-                  bits.push(printerEntry.modelData.tools.length + " tools")
-                else if (printerEntry.modelData.material)
-                  bits.push(printerEntry.modelData.material)
-                return bits.join("   ")
-              }
-              color: root.detailColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-
-            // Connect's own "Set ready!", offered only where it applies: a
-            // finished job, a reachable printer, and write rights on it.
-            Button {
-              id: setReadyButton
-
-              readonly property bool busy:
-                root.commandingUuid === String(printerEntry.modelData.uuid)
-
-              visible: printerEntry.modelData.state === "FINISHED"
-                && printerEntry.modelData.online
-                && printerEntry.modelData.canControl === true
-              // Stays visible while the command is in flight rather than
-              // vanishing: the row still says Finished until Connect catches
-              // up, and a button that disappears looks like a failure.
-              enabled: !busy
-              text: busy ? "Setting ready…" : "Set ready"
-              bordered: true
-              fontSize: Style.font.caption
-              onClicked: root.askSetReady(printerEntry.modelData)
-
-              opacity: busy ? 0.5 : 1.0
-              Behavior on opacity { NumberAnimation { duration: 150 } }
-
-              // A slow pulse while waiting, so the wait reads as progress
-              // rather than a stuck control.
-              SequentialAnimation on scale {
-                running: setReadyButton.busy
-                loops: Animation.Infinite
-                alwaysRunToEnd: true
-                NumberAnimation { to: 0.97; duration: 600; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
-              }
-            }
-              }
-            }
-
-            PanelSeparator { width: parent.width }
+            printer: printerEntry.modelData
+            host: root
+            busy: root.commandingUuid === String(printerEntry.modelData.uuid)
+            onSetReadyRequested: root.askSetReady(printerEntry.modelData)
           }
         }
 
