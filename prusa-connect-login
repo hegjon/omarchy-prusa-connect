@@ -2,28 +2,36 @@
 
 """Sign in to Prusa Connect for the Omarchy Prusa Connect plugin.
 
-Two ways in:
+Three ways in:
 
-  prusa-connect-login              Browser sign-in (OAuth authorization code + PKCE).
-  prusa-connect-login --paste      Paste a refresh token you copied from the
-                                   browser, for when the loopback redirect is
-                                   not registered with Prusa.
+  prusa-connect-login              Sign in with your Prusa account email and
+                                   password (and TOTP code, if 2FA is on),
+                                   the way the Prusa mobile app does.
+  prusa-connect-login --paste      Paste a refresh token you copied from a
+                                   signed-in browser session.
+  prusa-connect-login --browser    OAuth sign-in in your browser with a
+                                   loopback redirect. Prusa does not currently
+                                   register one, so this fails today.
 
   prusa-connect-login --status     Report whether credentials are present.
   prusa-connect-login --forget     Remove them.
 
-Only the refresh token is kept, and only in the GNOME keyring. No password is
-ever handled by this script: authentication happens in your browser.
+Only the refresh token is kept, and only in the GNOME keyring. The password is
+sent once, over HTTPS, to account.prusa3d.com and nowhere else; it is never
+stored, never logged, and never passed on the command line.
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import getpass
 import hashlib
+import http.cookiejar
 import http.server
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -35,8 +43,13 @@ import urllib.request
 
 PLUGIN_ID = "io.github.hegjon.prusa-connect"
 CLIENT_ID = "MRHTlZhZqkNrrQ6FUPtjyusAz8nc59ErHXP8XkS4"
-AUTHORIZE_URL = "https://account.prusa3d.com/o/authorize/"
-TOKEN_URL = "https://account.prusa3d.com/o/token/"
+ACCOUNT_HOST = "account.prusa3d.com"
+AUTHORIZE_URL = f"https://{ACCOUNT_HOST}/o/authorize/"
+TOKEN_URL = f"https://{ACCOUNT_HOST}/o/token/"
+# The redirect registered for Prusa's client: Connect's own sign-in callback.
+# The credential flow never loads it — the authorization code is lifted from
+# the redirect that points there.
+CONNECT_REDIRECT_URI = "https://connect.prusa3d.com/login/auth-callback"
 # The scope Connect's own web token carries, read from its JWT claims.
 SCOPE = "basic_info user_operations email_lists openid connect"
 USER_AGENT = "omarchy-prusa-connect/0.1.0"
@@ -308,6 +321,207 @@ def browser_login(port: int) -> None:
     print(f"Signed in ({account}). The refresh token is in your GNOME keyring.")
 
 
+# --- credential flow ---------------------------------------------------------
+#
+# What the Prusa mobile app does, and the only route Prusa leaves open to a
+# third party: run the OAuth authorization-code + PKCE flow against
+# account.prusa3d.com with Connect's registered redirect, but drive the sign-in
+# form ourselves instead of a browser. The authorization code arrives in a
+# redirect to connect.prusa3d.com, which is read from the Location header and
+# never followed, so Connect's web app never sees the code and cannot spend it.
+#
+# This is form scraping. It breaks the day Prusa adds a captcha or renames a
+# field, which is why --paste stays as the fallback.
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Surface 3xx responses instead of following them."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class AccountSession:
+    """A cookie-carrying HTTP session against account.prusa3d.com."""
+
+    def __init__(self) -> None:
+        self.jar = http.cookiejar.CookieJar()
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self.jar), NoRedirect()
+        )
+
+    def request(self, url: str, data: dict | None = None,
+                referer: str | None = None) -> tuple[int, str, str]:
+        """Return (status, location, body). Never follows a redirect."""
+        headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/json"}
+        if referer:
+            headers["Referer"] = referer
+        body = urllib.parse.urlencode(data).encode() if data is not None else None
+        if body is not None:
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        request = urllib.request.Request(url, data=body, headers=headers,
+                                         method="POST" if body is not None else "GET")
+        if DEBUG:
+            fields = ", ".join(f"{k}({len(v)} chars)" for k, v in (data or {}).items())
+            print(f"[debug] {request.get_method()} {url.split('?')[0]} fields: {fields}",
+                  file=sys.stderr)
+        try:
+            with self.opener.open(request, timeout=30) as response:
+                status = response.status
+                location = ""
+                text = response.read().decode(errors="replace")
+        except urllib.error.HTTPError as error:
+            status = error.code
+            location = error.headers.get("Location", "") or ""
+            text = error.read().decode(errors="replace") if status < 300 or status >= 400 else ""
+        except urllib.error.URLError as error:
+            raise LoginError(f"could not reach {ACCOUNT_HOST}: {error.reason}")
+        if DEBUG:
+            # Never the Location itself: past sign-in it carries the code.
+            print(f"[debug] HTTP {status}"
+                  + (f" -> {urllib.parse.urlsplit(location).netloc}" if location else ""),
+                  file=sys.stderr)
+        return status, location, text
+
+
+def form_field(html: str, name: str) -> str | None:
+    match = re.search(
+        r'<input[^>]+name=["\']' + re.escape(name) + r'["\'][^>]*value=["\']([^"\']*)',
+        html,
+    )
+    return match.group(1) if match else None
+
+
+def form_has_field(html: str, name: str) -> bool:
+    return re.search(r'<input[^>]+name=["\']' + re.escape(name) + r'["\']', html) is not None
+
+
+def absolute(url: str) -> str:
+    return url if urllib.parse.urlsplit(url).scheme else f"https://{ACCOUNT_HOST}{url}"
+
+
+def ask_otp() -> str:
+    try:
+        return input("Two-factor code: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        raise LoginError("cancelled")
+
+
+def finish_sign_in(session: AccountSession, status: int, location: str,
+                   html: str, url: str) -> str:
+    """Take the flow from the credential POST to an authorization code.
+
+    Prusa may answer the POST with a redirect straight to Connect, with a
+    redirect chain through the authorize page, or with a further form: the
+    sign-in form again (credentials refused) or a TOTP form. Handle whichever
+    page comes up until a redirect points at Connect's callback.
+    """
+    for _ in range(12):
+        if status in (301, 302, 303, 307, 308):
+            target = absolute(location)
+            if target.startswith(CONNECT_REDIRECT_URI):
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(target).query)
+                if query.get("error"):
+                    detail = (query.get("error_description") or query["error"])[0]
+                    raise LoginError(f"Prusa refused the sign-in: {detail}")
+                code = (query.get("code") or [""])[0]
+                if not code:
+                    raise LoginError("Prusa returned no authorization code")
+                return code
+            if urllib.parse.urlsplit(target).netloc != ACCOUNT_HOST:
+                raise LoginError("Prusa redirected somewhere unexpected: "
+                                 + urllib.parse.urlsplit(target).netloc)
+            url = target
+            status, location, html = session.request(url)
+            continue
+
+        if status != 200:
+            raise LoginError(f"unexpected response from Prusa during sign-in (HTTP {status})")
+
+        if form_has_field(html, "otp_token"):
+            csrf = form_field(html, "csrfmiddlewaretoken") or ""
+            status, location, html = session.request(
+                url, data={"csrfmiddlewaretoken": csrf, "otp_token": ask_otp()},
+                referer=url)
+            if status == 200 and form_has_field(html, "otp_token"):
+                raise LoginError("Prusa rejected the two-factor code")
+            continue
+
+        if form_has_field(html, "password"):
+            raise LoginError("Prusa rejected the email or password")
+
+        if form_has_field(html, "allow"):
+            raise LoginError(
+                "Prusa is asking for consent on a page this script cannot\n"
+                "answer. Use the paste route instead: prusa-connect-login --paste"
+            )
+
+        raise LoginError("Prusa showed a page this script does not recognise")
+
+    raise LoginError("could not obtain an authorization code from Prusa")
+
+
+def credential_login(email: str | None) -> None:
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(64)).rstrip(b"=").decode()
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    authorize = AUTHORIZE_URL + "?" + urllib.parse.urlencode({
+        "client_id": CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": CONNECT_REDIRECT_URI,
+        "scope": SCOPE,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    })
+
+    session = AccountSession()
+
+    # The authorize URL bounces an anonymous visitor to the sign-in form, with
+    # the authorize request itself carried along in `next`.
+    login_url = authorize
+    status, location, html = session.request(login_url)
+    while status in (301, 302, 303, 307, 308):
+        login_url = absolute(location)
+        status, location, html = session.request(login_url)
+    if status != 200 or not form_has_field(html, "password"):
+        raise LoginError(f"unexpected sign-in page from Prusa (HTTP {status})")
+    csrf = form_field(html, "csrfmiddlewaretoken")
+    if not csrf:
+        raise LoginError("could not find the sign-in form's CSRF token")
+
+    print("Sign in with your Prusa account. The password goes to "
+          f"{ACCOUNT_HOST} only and is not stored.\n")
+    try:
+        if not email:
+            email = input("Email: ").strip()
+        password = getpass.getpass("Password: ")
+    except (EOFError, KeyboardInterrupt):
+        raise LoginError("cancelled")
+    if not email or not password:
+        raise LoginError("email and password are both required")
+
+    form = {"csrfmiddlewaretoken": csrf, "email": email, "password": password}
+    next_field = form_field(html, "next")
+    if next_field is not None:
+        form["next"] = next_field
+    status, location, html = session.request(login_url, data=form, referer=login_url)
+    del form, password
+
+    code = finish_sign_in(session, status, location, html, login_url)
+    tokens = post_token({
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "code": code,
+        "redirect_uri": CONNECT_REDIRECT_URI,
+        "code_verifier": verifier,
+    })
+    account = persist(tokens)
+    print(f"\nSigned in ({account}). The refresh token is in your GNOME keyring.")
+
+
 # --- paste route -------------------------------------------------------------
 
 
@@ -432,16 +646,20 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group = parser.add_mutually_exclusive_group()
+    group.add_argument("--browser", action="store_true",
+                       help="OAuth sign-in in the browser with a loopback redirect "
+                            "(Prusa does not currently register one)")
     group.add_argument("--paste", action="store_true",
-                       help="paste a refresh token instead of using the browser")
+                       help="paste a refresh token instead of signing in")
     group.add_argument("--stdin", action="store_true",
                        help="read the refresh token from stdin")
     group.add_argument("--status", action="store_true",
                        help="report whether credentials are present")
     group.add_argument("--forget", action="store_true",
                        help="remove stored credentials")
+    parser.add_argument("--email", help="Prusa account email (asked for if omitted)")
     parser.add_argument("--port", type=int, default=0,
-                        help="fixed loopback port for the redirect (default: ephemeral)")
+                        help="fixed loopback port for --browser (default: ephemeral)")
     parser.add_argument("--debug", action="store_true",
                         help="print request shape and raw responses to stderr")
     args = parser.parse_args()
@@ -462,7 +680,10 @@ def main() -> int:
         if args.paste:
             paste_login()
             return 0
-        browser_login(args.port)
+        if args.browser:
+            browser_login(args.port)
+            return 0
+        credential_login(args.email)
         return 0
     except LoginError as error:
         print(f"\nprusa-connect-login: {error}", file=sys.stderr)

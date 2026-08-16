@@ -39,16 +39,28 @@ of which are present on a stock Omarchy system.
 ## Signing in
 
 Prusa Connect has no API keys, so the plugin needs an OAuth refresh token for
-your Prusa account. Prusa's OAuth client is registered only for their own web
-and mobile apps, so the token has to be copied out of a signed-in browser
-session:
+your Prusa account. Sign in once from a terminal:
 
 ```bash
-~/.config/omarchy/plugins/io.github.hegjon.prusa-connect/prusa-connect-login --paste
+~/.config/omarchy/plugins/io.github.hegjon.prusa-connect/prusa-connect-login
 ```
 
-With Prusa Connect open and signed in, run this in the browser console and paste
-the result at the prompt:
+It asks for your Prusa account email and password, and for a two-factor code
+if your account has one, then runs the same OAuth authorization-code + PKCE
+flow the Prusa mobile app runs: the sign-in form on `account.prusa3d.com` is
+driven directly, and the authorization code is read from the redirect back to
+Connect rather than a browser. Only the resulting refresh token is stored.
+
+**The password is sent once, over HTTPS, to `account.prusa3d.com` and nowhere
+else.** It is never stored, never logged (even with `--debug`), and never passed
+on the command line. This is form scraping, though: if Prusa adds a captcha or
+reshapes the page it will stop working, and the paste route below is the
+fallback.
+
+### Pasting a token instead
+
+With Prusa Connect open and signed in, run this in the browser console and
+paste the result at the prompt of `prusa-connect-login --paste`:
 
 ```js
 localStorage['auth.refresh_token']
@@ -59,16 +71,13 @@ confuse. `auth.access_token` lasts about two hours and cannot be renewed;
 `auth.refresh_token` is the one to copy. The script reads the `type` claim and
 tells you if the wrong one was pasted.
 
-**No password is ever handled by this plugin.** Authentication happens in your
-browser; only the resulting refresh token is stored.
-
 ### Why not a browser sign-in flow
 
-`prusa-connect-login` also implements a standard OAuth authorization-code flow
-with PKCE and a loopback redirect. Prusa currently rejects it with
-`invalid_request — Mismatching redirect URI`, because no loopback address is
-registered for their client. The code is kept for the day that changes; until
-then use `--paste`.
+`prusa-connect-login --browser` implements the standard OAuth flow with a
+loopback redirect. Prusa currently rejects it with `invalid_request —
+Mismatching redirect URI`, because no loopback address is registered for their
+client; the only registered redirect is Connect's own callback, which is what
+the default flow uses. The code is kept for the day that changes.
 
 The OAuth password grant is also closed: `account.prusa3d.com` answers every
 credential combination with `invalid_grant`.
@@ -84,10 +93,12 @@ you will need to paste a fresh token.
 Other commands:
 
 ```bash
+prusa-connect-login --email me@example.com   # skip the email prompt
 prusa-connect-login --status    # is a credential present?
 prusa-connect-login --forget    # remove it from the keyring
+prusa-connect-login --paste     # paste a refresh token from the browser
 prusa-connect-login --stdin     # read the token from stdin, for scripted setup
-prusa-connect-login --debug     # print request shape and raw responses
+prusa-connect-login --debug     # print request shape (never values) to stderr
 ```
 
 ### Where the credential lives
