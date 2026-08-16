@@ -82,6 +82,9 @@ Panel {
   readonly property string backendPath:
     Qt.resolvedUrl("prusa-connect-fetch").toString().replace(/^file:\/\//, "")
 
+  readonly property string loginPath:
+    Qt.resolvedUrl("prusa-connect-login").toString().replace(/^file:\/\//, "")
+
   readonly property string printerGlyph: String.fromCodePoint(0xF042B)   // nf-md-printer_3d
 
   // --- formatting -------------------------------------------------------
@@ -280,6 +283,33 @@ Panel {
     if (fleet.online > 0) parts.push(fleet.online + " online")
     if (parts.length === 0) parts.push(fleet.total + " printers")
     return parts.join(" · ")
+  }
+
+  // --- sign-in ----------------------------------------------------------
+
+  // Signing in needs a password prompt, so it runs in a terminal rather than
+  // in the panel: the same floating-terminal idiom the update widget uses.
+  // The script pokes `refresh` over IPC when it succeeds, so the panel does
+  // not sit on "not signed in" until the next scheduled poll.
+  function signIn() {
+    if (!bar) return
+    bar.run("omarchy-launch-floating-terminal-with-presentation " + Util.shellQuote(loginPath))
+    close()
+  }
+
+  // Panel's own IpcHandler is replaced so that `refresh` can sit next to
+  // open/close/toggle under the one target the plugin already publishes.
+  manageIpc: false
+
+  IpcHandler {
+    target: root.pluginId
+
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
+    function refresh(): void { root.refresh() }
   }
 
   // --- fetching ---------------------------------------------------------
@@ -653,7 +683,24 @@ Panel {
           Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            text: "Run prusa-connect-login in a terminal to sign in."
+            text: "Sign in with your Prusa account to see your printers. "
+              + "The password goes to account.prusa3d.com only and is not stored."
+            color: root.detailColor
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          Button {
+            text: "Sign in"
+            bordered: true
+            fontSize: Style.font.caption
+            onClicked: root.signIn()
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Or run prusa-connect-login in a terminal."
             color: root.detailColor
             font.family: Style.font.family
             font.pixelSize: Style.font.caption

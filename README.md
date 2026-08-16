@@ -39,7 +39,8 @@ of which are present on a stock Omarchy system.
 ## Signing in
 
 Prusa Connect has no API keys, so the plugin needs an OAuth refresh token for
-your Prusa account. Sign in once from a terminal:
+your Prusa account. Until it has one, the panel shows a **Sign in** button that
+opens the sign-in in a floating terminal; the same thing from a shell is:
 
 ```bash
 ~/.config/omarchy/plugins/io.github.hegjon.prusa-connect/prusa-connect-login
