@@ -11,7 +11,7 @@
 #
 # The refresh token never reaches argv: it goes to curl over stdin.
 
-readonly PRUSA_PLUGIN_ID="io.github.hegjon.prusa-connect"
+readonly PRUSA_PLUGIN_ID="hegjon.prusa-connect"
 readonly PRUSA_CLIENT_ID="MRHTlZhZqkNrrQ6FUPtjyusAz8nc59ErHXP8XkS4"
 readonly PRUSA_TOKEN_URL="https://account.prusa3d.com/o/token/"
 

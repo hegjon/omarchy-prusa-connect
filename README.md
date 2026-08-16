@@ -22,15 +22,15 @@ omarchy restart shell
 If the widget is enabled but not visible, place it explicitly:
 
 ```bash
-omarchy plugin enable io.github.hegjon.prusa-connect --section right
+omarchy plugin enable hegjon.prusa-connect --section right
 omarchy restart shell
 ```
 
 Update or remove:
 
 ```bash
-omarchy plugin update io.github.hegjon.prusa-connect --yes
-omarchy plugin remove io.github.hegjon.prusa-connect
+omarchy plugin update hegjon.prusa-connect --yes
+omarchy plugin remove hegjon.prusa-connect
 ```
 
 Requires `curl`, `jq`, `python3` and `secret-tool` (package `libsecret`), all
@@ -43,7 +43,7 @@ your Prusa account. Until it has one, the panel shows a **Sign in** button that
 opens the sign-in in a floating terminal; the same thing from a shell is:
 
 ```bash
-~/.config/omarchy/plugins/io.github.hegjon.prusa-connect/prusa-connect-login
+~/.config/omarchy/plugins/hegjon.prusa-connect/prusa-connect-login
 ```
 
 It asks for your Prusa account email and password, and for a two-factor code
@@ -103,7 +103,7 @@ prusa-connect-login --debug     # print request shape (never values) to stderr
 ### Where the credential lives
 
 Only the refresh token is stored, and only in the GNOME keyring under
-`application=io.github.hegjon.prusa-connect`. It is never written to a config
+`application=hegjon.prusa-connect`. It is never written to a config
 file, never passed as a command-line argument where `ps` could show it, and
 never logged. Access tokens are cached in `$XDG_RUNTIME_DIR` at mode 0600 and
 expire on their own.

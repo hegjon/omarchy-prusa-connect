@@ -14,7 +14,7 @@ import "./components"
 Panel {
   id: root
 
-  readonly property string pluginId: "io.github.hegjon.prusa-connect"
+  readonly property string pluginId: "hegjon.prusa-connect"
 
   moduleName: pluginId
   ipcTarget: pluginId

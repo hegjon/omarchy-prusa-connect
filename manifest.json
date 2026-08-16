@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.hegjon.prusa-connect",
+  "id": "hegjon.prusa-connect",
   "name": "Prusa Connect",
   "version": "0.3.0",
   "author": "Jonny Heggheim",
