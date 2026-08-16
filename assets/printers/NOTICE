@@ -30,7 +30,10 @@ ask to have removed rather than litigate.
 
 If Prusa Research would prefer they not be redistributed, remove this directory:
 the plugin falls back to generic status glyphs with no loss of function — see
-stateGlyph() in PrusaWidget.qml. Media enquiries: media@prusa3d.com.
+stateGlyph() in PrusaWidget.qml.
+
+Enquiries: info@prusa3d.com, the address given for media enquiries on Prusa's
+media assets page.
 
 Trade marks, including the Prusa name and logo, belong to Prusa Research a.s.
 This plugin is not affiliated with, endorsed by, or supported by Prusa Research.
