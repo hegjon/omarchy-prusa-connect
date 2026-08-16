@@ -38,6 +38,11 @@ Panel {
   // reads the old state.
   property int settleTicks: 0
 
+  // The printer a command is in flight for. Its button stays visible but
+  // disabled until the fleet catches up, so the command cannot be sent twice
+  // during the seconds when the row still says Finished.
+  property string commandingUuid: ""
+
   // Each point of the sheet checklist, cleared whenever the prompt opens so a
   // previous answer can never carry over to another printer.
   property bool sheetInPlace: false
@@ -317,6 +322,17 @@ Panel {
     if (parsed && parsed.summary) fleet = parsed.summary
     lastUpdatedAt = Date.now()
 
+    // The command landed once the printer stops reporting the state it was
+    // acted on in; nothing is in flight after that.
+    if (commandingUuid !== "") {
+      for (var j = 0; j < printers.length; j++) {
+        if (printers[j].uuid === commandingUuid && printers[j].state !== "FINISHED") {
+          commandingUuid = ""
+          break
+        }
+      }
+    }
+
     evaluateNotifications()
   }
 
@@ -407,6 +423,7 @@ Panel {
     // be able to send the command with the checklist unanswered.
     if (!sheetChecklistComplete) return
     commandProcess.running = false
+    commandingUuid = String(readyCandidate.uuid)
     commandProcess.command = [commandPath, "ready", String(readyCandidate.uuid)]
     commandProcess.running = true
     readyCandidate = null
@@ -437,12 +454,11 @@ Panel {
       } else {
         root.commandError = ""
       }
-      // Whatever happened, the fleet has probably moved on. One refresh is not
-      // enough: the command returns before Connect has the new state, so follow
-      // it with a short burst rather than leaving the panel stale until the next
-      // scheduled poll — up to a minute away on an idle fleet.
-      root.settleTicks = 8
-      root.refresh()
+      if (root.commandError !== "") root.commandingUuid = ""
+      // Connect has not caught up the instant the request returns, so pause
+      // before looking rather than spending a poll that is certain to see the
+      // old state. The burst that follows covers the rest.
+      commandSettleDelay.restart()
     }
   }
 
@@ -485,6 +501,16 @@ Panel {
   }
 
   Timer {
+    id: commandSettleDelay
+    interval: 1000
+    repeat: false
+    onTriggered: {
+      root.settleTicks = 8
+      root.refresh()
+    }
+  }
+
+  Timer {
     // The post-command burst: every two seconds for about a quarter of a
     // minute, then back to the normal cadence.
     interval: 2000
@@ -492,6 +518,7 @@ Panel {
     repeat: true
     onTriggered: {
       root.settleTicks -= 1
+      if (root.settleTicks <= 0) root.commandingUuid = ""
       root.refresh()
     }
   }
@@ -926,13 +953,35 @@ Panel {
             // Connect's own "Set ready!", offered only where it applies: a
             // finished job, a reachable printer, and write rights on it.
             Button {
+              id: setReadyButton
+
+              readonly property bool busy:
+                root.commandingUuid === String(printerEntry.modelData.uuid)
+
               visible: printerEntry.modelData.state === "FINISHED"
                 && printerEntry.modelData.online
                 && printerEntry.modelData.canControl === true
-              text: "Set ready"
+              // Stays visible while the command is in flight rather than
+              // vanishing: the row still says Finished until Connect catches
+              // up, and a button that disappears looks like a failure.
+              enabled: !busy
+              text: busy ? "Setting ready…" : "Set ready"
               bordered: true
               fontSize: Style.font.caption
               onClicked: root.askSetReady(printerEntry.modelData)
+
+              opacity: busy ? 0.5 : 1.0
+              Behavior on opacity { NumberAnimation { duration: 150 } }
+
+              // A slow pulse while waiting, so the wait reads as progress
+              // rather than a stuck control.
+              SequentialAnimation on scale {
+                running: setReadyButton.busy
+                loops: Animation.Infinite
+                alwaysRunToEnd: true
+                NumberAnimation { to: 0.97; duration: 600; easing.type: Easing.InOutQuad }
+                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+              }
             }
               }
             }
