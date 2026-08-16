@@ -1,0 +1,476 @@
+#!/usr/bin/env python3
+
+"""Sign in to Prusa Connect for the Omarchy Prusa Connect plugin.
+
+Two ways in:
+
+  prusa-connect-login              Browser sign-in (OAuth authorization code + PKCE).
+  prusa-connect-login --paste      Paste a refresh token you copied from the
+                                   browser, for when the loopback redirect is
+                                   not registered with Prusa.
+
+  prusa-connect-login --status     Report whether credentials are present.
+  prusa-connect-login --forget     Remove them.
+
+Only the refresh token is kept, and only in the GNOME keyring. No password is
+ever handled by this script: authentication happens in your browser.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import http.server
+import json
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+
+PLUGIN_ID = "io.github.hegjon.prusa-connect"
+CLIENT_ID = "MRHTlZhZqkNrrQ6FUPtjyusAz8nc59ErHXP8XkS4"
+AUTHORIZE_URL = "https://account.prusa3d.com/o/authorize/"
+TOKEN_URL = "https://account.prusa3d.com/o/token/"
+# The scope Connect's own web token carries, read from its JWT claims.
+SCOPE = "basic_info user_operations email_lists openid connect"
+USER_AGENT = "omarchy-prusa-connect/0.1.0"
+
+STATE_DIR = os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+    "omarchy",
+    "prusa-connect",
+)
+ACCOUNT_FILE = os.path.join(STATE_DIR, "account")
+
+CALLBACK_TIMEOUT_SECONDS = 300
+
+
+class LoginError(Exception):
+    """Something the user can act on."""
+
+
+# --- keyring -----------------------------------------------------------------
+
+
+def secret_tool() -> str:
+    path = shutil.which("secret-tool")
+    if not path:
+        raise LoginError("secret-tool is not installed (package: libsecret)")
+    return path
+
+
+def store_refresh_token(account: str, token: str) -> None:
+    proc = subprocess.run(
+        [
+            secret_tool(), "store",
+            "--label=Prusa Connect refresh token",
+            "application", PLUGIN_ID,
+            "account", account,
+        ],
+        input=token.encode(),
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise LoginError(
+            "could not write to the GNOME keyring — is your login keyring unlocked?"
+        )
+
+
+def lookup_refresh_token(account: str) -> str | None:
+    proc = subprocess.run(
+        [secret_tool(), "lookup", "application", PLUGIN_ID, "account", account],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        return None
+    token = proc.stdout.decode().rstrip("\r\n")
+    return token or None
+
+
+def clear_credentials() -> None:
+    account = stored_account()
+    if account:
+        subprocess.run(
+            [secret_tool(), "clear", "application", PLUGIN_ID, "account", account],
+            capture_output=True,
+        )
+    subprocess.run(
+        [secret_tool(), "clear", "application", PLUGIN_ID], capture_output=True
+    )
+    try:
+        os.remove(ACCOUNT_FILE)
+    except FileNotFoundError:
+        pass
+
+
+def stored_account() -> str | None:
+    try:
+        with open(ACCOUNT_FILE, encoding="utf-8") as handle:
+            return handle.readline().strip() or None
+    except OSError:
+        return None
+
+
+def write_account(account: str) -> None:
+    os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+    os.chmod(STATE_DIR, 0o700)
+    with open(ACCOUNT_FILE, "w", encoding="utf-8") as handle:
+        handle.write(account + "\n")
+    os.chmod(ACCOUNT_FILE, 0o600)
+
+
+# --- token helpers -----------------------------------------------------------
+
+
+def account_label(access_token: str) -> str:
+    """Derive a stable keyring key from the token's claims.
+
+    The signature is irrelevant here — this is a local label, not an
+    authorization decision, so the payload is merely decoded, never trusted.
+    """
+    try:
+        payload = access_token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (IndexError, ValueError):
+        return "default"
+    for key in ("connect_id", "sub"):
+        value = claims.get(key)
+        if value:
+            return f"prusa-{value}"
+    return "default"
+
+
+DEBUG = False
+
+
+def post_token(fields: dict[str, str]) -> dict:
+    body = urllib.parse.urlencode(fields).encode()
+    request = urllib.request.Request(
+        TOKEN_URL,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            # Cloudflare fronts account.prusa3d.com and answers Python's default
+            # User-Agent with a 1010 browser-signature ban, so identify the
+            # plugin explicitly rather than letting urllib speak for itself.
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    if DEBUG:
+        # Field names and lengths only: the values are credentials.
+        shape = ", ".join(f"{key}({len(value)} chars)" for key, value in fields.items())
+        print(f"[debug] POST {TOKEN_URL}\n[debug] fields: {shape}", file=sys.stderr)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read())
+            if DEBUG:
+                print(f"[debug] HTTP 200, keys: {sorted(payload)}", file=sys.stderr)
+            return payload
+    except urllib.error.HTTPError as error:
+        raw = ""
+        detail = ""
+        try:
+            raw = error.read().decode(errors="replace")
+            payload = json.loads(raw)
+            detail = f": {payload.get('error', '')} {payload.get('error_description', '')}".rstrip()
+        except (ValueError, OSError):
+            pass
+        if DEBUG:
+            print(f"[debug] HTTP {error.code}\n[debug] body: {raw}", file=sys.stderr)
+        raise LoginError(f"Prusa rejected the token request (HTTP {error.code}){detail}")
+    except urllib.error.URLError as error:
+        raise LoginError(f"could not reach account.prusa3d.com: {error.reason}")
+
+
+def persist(tokens: dict) -> str:
+    refresh_token = tokens.get("refresh_token")
+    access_token = tokens.get("access_token", "")
+    if not refresh_token:
+        raise LoginError("Prusa returned no refresh token")
+    account = account_label(access_token)
+    store_refresh_token(account, refresh_token)
+    write_account(account)
+    return account
+
+
+# --- browser flow ------------------------------------------------------------
+
+
+class CallbackHandler(http.server.BaseHTTPRequestHandler):
+    result: dict = {}
+    expected_state = ""
+
+    def do_GET(self) -> None:  # noqa: N802 - required name
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        code = (query.get("code") or [""])[0]
+        state = (query.get("state") or [""])[0]
+        error = (query.get("error") or [""])[0]
+
+        if error:
+            CallbackHandler.result = {"error": error}
+            message, status = f"Sign-in failed: {error}", 400
+        elif not code:
+            CallbackHandler.result = {"error": "no authorization code returned"}
+            message, status = "Sign-in failed: no authorization code.", 400
+        elif not secrets.compare_digest(state, CallbackHandler.expected_state):
+            CallbackHandler.result = {"error": "state mismatch"}
+            message, status = "Sign-in failed: state mismatch.", 400
+        else:
+            CallbackHandler.result = {"code": code}
+            message, status = "Signed in. You can close this tab.", 200
+
+        body = (
+            "<!doctype html><meta charset=utf-8>"
+            "<title>Prusa Connect</title>"
+            "<body style='font:16px system-ui;padding:3rem;text-align:center'>"
+            f"<p>{message}</p></body>"
+        ).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args) -> None:  # silence the default stderr logging
+        pass
+
+
+def browser_login(port: int) -> None:
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(64)).rstrip(b"=").decode()
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .rstrip(b"=")
+        .decode()
+    )
+    state = secrets.token_urlsafe(24)
+
+    server = http.server.HTTPServer(("127.0.0.1", port), CallbackHandler)
+    CallbackHandler.expected_state = state
+    CallbackHandler.result = {}
+    bound_port = server.server_address[1]
+    redirect_uri = f"http://127.0.0.1:{bound_port}/callback"
+
+    authorize = AUTHORIZE_URL + "?" + urllib.parse.urlencode({
+        "client_id": CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": SCOPE,
+        "state": state,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    })
+
+    print(f"Listening on {redirect_uri}")
+    print("Opening your browser to sign in to Prusa...\n")
+    print("If it does not open, visit this URL yourself:\n")
+    print(f"  {authorize}\n")
+
+    if shutil.which("xdg-open"):
+        subprocess.Popen(
+            ["xdg-open", authorize],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    thread.join(CALLBACK_TIMEOUT_SECONDS)
+    server.server_close()
+
+    if not CallbackHandler.result:
+        raise LoginError(
+            "timed out waiting for the browser.\n\n"
+            "If Prusa showed an error such as 'Mismatching redirect URI', then a\n"
+            "loopback address is not registered for this client and this flow\n"
+            "cannot work. Use the paste route instead:\n\n"
+            "    prusa-connect-login --paste"
+        )
+    if "error" in CallbackHandler.result:
+        raise LoginError(f"sign-in failed: {CallbackHandler.result['error']}")
+
+    tokens = post_token({
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "code": CallbackHandler.result["code"],
+        "redirect_uri": redirect_uri,
+        "code_verifier": verifier,
+    })
+    account = persist(tokens)
+    print(f"Signed in ({account}). The refresh token is in your GNOME keyring.")
+
+
+# --- paste route -------------------------------------------------------------
+
+
+def extract_refresh_token(pasted: str) -> str:
+    """Accept a bare token, or the JSON blob a localStorage entry often holds."""
+    pasted = pasted.strip().strip('"').strip()
+    if not pasted:
+        raise LoginError("no token given")
+    if not pasted.startswith("{"):
+        return pasted
+
+    try:
+        blob = json.loads(pasted)
+    except ValueError:
+        return pasted
+
+    def find(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if "refresh" in key.lower() and isinstance(value, str) and value:
+                    return value
+            for value in node.values():
+                found = find(value)
+                if found:
+                    return found
+        return None
+
+    token = find(blob)
+    if not token:
+        raise LoginError("that JSON contains no refresh token field")
+    return token
+
+
+def token_claims(token: str) -> dict | None:
+    """Decode a JWT payload without verifying it.
+
+    Local triage only — never an authorization decision — so an unverified
+    decode is appropriate here.
+    """
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (IndexError, ValueError):
+        return None
+    return claims if isinstance(claims, dict) else None
+
+
+def reject_access_token(token: str) -> None:
+    """Refuse an access token pasted in place of a refresh token.
+
+    Connect stores both in localStorage under adjacent keys, and both are JWTs,
+    so only the 'type' claim tells them apart. Saying which one was pasted beats
+    relaying a bare 'invalid_grant' from Prusa.
+    """
+    claims = token_claims(token)
+    if claims and claims.get("type") == "access":
+        raise LoginError(
+            "that is an access token, not a refresh token.\n\n"
+            "It is the value of 'auth.access_token', which expires in about two\n"
+            "hours and cannot be renewed. Copy 'auth.refresh_token' instead."
+        )
+
+
+def stdin_login() -> None:
+    """Take the refresh token on stdin, for scripted or assisted setup."""
+    token = extract_refresh_token(sys.stdin.read())
+    reject_access_token(token)
+    tokens = post_token({
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "refresh_token": token,
+    })
+    account = persist(tokens)
+    print(f"Accepted ({account}). The refresh token is in your GNOME keyring.")
+
+
+def paste_login() -> None:
+    print(
+        "Paste a Prusa Connect refresh token.\n\n"
+        "In the browser, with Connect open and signed in:\n"
+        "  DevTools -> Application -> Local Storage -> https://connect.prusa3d.com\n"
+        "  copy the value of the entry whose key mentions 'refresh'.\n\n"
+        "Either the bare token or the whole JSON value will do.\n\n"
+        "Treat it like a password: it grants access to your account until you\n"
+        "sign out of Connect.\n"
+    )
+    try:
+        token = extract_refresh_token(input("Refresh token: "))
+    except (EOFError, KeyboardInterrupt):
+        raise LoginError("cancelled")
+    reject_access_token(token)
+
+    # Exchange it once, both to validate it and to pick up a rotated token.
+    tokens = post_token({
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "refresh_token": token,
+    })
+    account = persist(tokens)
+    print(f"\nAccepted ({account}). The refresh token is in your GNOME keyring.")
+
+
+# --- status ------------------------------------------------------------------
+
+
+def show_status() -> int:
+    account = stored_account()
+    if not account:
+        print("Not signed in.")
+        return 1
+    if lookup_refresh_token(account):
+        print(f"Signed in as {account} (refresh token in GNOME keyring).")
+        return 0
+    print(f"Account {account} is configured, but the keyring holds no refresh token.")
+    return 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Sign in to Prusa Connect for the Omarchy plugin.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--paste", action="store_true",
+                       help="paste a refresh token instead of using the browser")
+    group.add_argument("--stdin", action="store_true",
+                       help="read the refresh token from stdin")
+    group.add_argument("--status", action="store_true",
+                       help="report whether credentials are present")
+    group.add_argument("--forget", action="store_true",
+                       help="remove stored credentials")
+    parser.add_argument("--port", type=int, default=0,
+                        help="fixed loopback port for the redirect (default: ephemeral)")
+    parser.add_argument("--debug", action="store_true",
+                        help="print request shape and raw responses to stderr")
+    args = parser.parse_args()
+
+    global DEBUG
+    DEBUG = args.debug
+
+    try:
+        if args.status:
+            return show_status()
+        if args.forget:
+            clear_credentials()
+            print("Prusa Connect credentials removed.")
+            return 0
+        if args.stdin:
+            stdin_login()
+            return 0
+        if args.paste:
+            paste_login()
+            return 0
+        browser_login(args.port)
+        return 0
+    except LoginError as error:
+        print(f"\nprusa-connect-login: {error}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\ncancelled", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

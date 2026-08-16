@@ -1,0 +1,102 @@
+#!/bin/bash
+
+# Exercise normalize.jq against captured and synthetic Connect responses.
+# No credentials and no network: everything here runs off fixtures.
+
+set -uo pipefail
+
+readonly TEST_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly PLUGIN_DIR="$(dirname -- "$TEST_DIR")"
+readonly NORMALIZE="$PLUGIN_DIR/normalize.jq"
+
+passed=0
+failed=0
+
+check() {
+  local name="$1" fixture="$2" filter="$3"
+  local out
+  if ! out=$(jq -f "$NORMALIZE" <"$TEST_DIR/fixtures/$fixture" 2>&1); then
+    printf '  FAIL  %s\n        normalize.jq errored: %s\n' "$name" "$out"
+    (( failed++ ))
+    return
+  fi
+  if jq -e "$filter" >/dev/null 2>&1 <<<"$out"; then
+    printf '  ok    %s\n' "$name"
+    (( passed++ ))
+  else
+    printf '  FAIL  %s\n        expected: %s\n' "$name" "$filter"
+    (( failed++ ))
+  fi
+}
+
+echo "normalize.jq"
+
+# --- captured fleet: three printers, one live, two long offline -------------
+check "counts the whole fleet" printers.json \
+  '.summary.total == 3'
+check "counts only the connected printer as online" printers.json \
+  '.summary.online == 1'
+check "counts both disconnected printers as offline" printers.json \
+  '.summary.offline == 2'
+
+# Connect keeps reporting a stale printer_state for a printer that has been
+# unreachable for months; liveness has to win or the panel lies.
+check "stale ATTENTION on a disconnected printer reads as OFFLINE" printers.json \
+  '.printers[0].state == "OFFLINE" and .printers[0].printerState == "ATTENTION"'
+check "a disconnected printer is not counted as needing attention" printers.json \
+  '.summary.attention == 0'
+
+# Fields Connect omits entirely for a disconnected printer.
+check "missing temps normalize to null rather than erroring" printers.json \
+  '.printers[0].temps == null'
+check "missing job normalizes to null" printers.json \
+  '.printers[0].job == null'
+check "material survives from the filament field" printers.json \
+  '.printers[0].material == "PETG"'
+
+# The live XL reports two tools and a pending dialog.
+check "reads temperatures from a live printer" printers.json \
+  '.printers[1].temps.nozzle == 19.0 and .printers[1].temps.bed == 18.3'
+check "keeps both tools, in index order" printers.json \
+  '(.printers[1].tools | length) == 2 and .printers[1].tools[0].index == 1'
+check "surfaces the pending dialog as the attention reason" printers.json \
+  '.printers[1].attention.title == "DISPLAY PROBLEM DETECTED"'
+check "a printer with no dialog has no attention reason" printers.json \
+  '.printers[0].attention == null'
+
+# --- synthetic printing job -------------------------------------------------
+check "counts a printing printer" printing.json \
+  '.summary.printing == 1'
+check "reads job name and progress" printing.json \
+  '.printers[0].job.name == "benchy.bgcode" and .printers[0].job.progress == 42.5'
+check "reads remaining time" printing.json \
+  '.printers[0].job.remaining == 4320'
+check "reads nozzle target while heating" printing.json \
+  '.printers[0].temps.nozzleTarget == 215.0'
+
+# --- degenerate input -------------------------------------------------------
+echo
+echo "degenerate input"
+for payload in '{}' '{"printers":[]}' '{"printers":[{}]}'; do
+  if out=$(jq -f "$NORMALIZE" <<<"$payload" 2>&1); then
+    printf '  ok    survives %s\n' "$payload"
+    (( passed++ ))
+  else
+    printf '  FAIL  %s errored: %s\n' "$payload" "$out"
+    (( failed++ ))
+  fi
+done
+
+# A printer object with nothing in it must still yield a renderable row.
+if jq -f "$NORMALIZE" <<<'{"printers":[{}]}' |
+   jq -e '.printers[0].state == "OFFLINE" and .printers[0].name == "Printer"' >/dev/null 2>&1; then
+  printf '  ok    an empty printer object still renders\n'
+  (( passed++ ))
+else
+  printf '  FAIL  an empty printer object still renders\n'
+  (( failed++ ))
+fi
+
+echo
+printf '%d passed, %d failed\n' "$passed" "$failed"
+(( failed == 0 ))

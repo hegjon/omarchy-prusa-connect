@@ -1,0 +1,105 @@
+{
+  "printers": [
+    {
+      "printer_model": "MK4IS",
+      "supported_printer_models": ["MK4", "MK3.9", "MK3", "MK3S"],
+      "printer_type_compatible": ["MK4IS", "MK4", "MK3.9", "MK3", "MK3S"],
+      "printer_state": "ATTENTION",
+      "last_online": 1782380510.0,
+      "nozzle_diameter": 0.4,
+      "enclosure": { "present": false },
+      "tools": {
+        "1": { "nozzle_diameter": 0.4, "material": "PETG", "high_flow": false, "hardened": false }
+      },
+      "connect_state": "OFFLINE",
+      "allowed_functionalities": ["files", "filament", "queue", "bgcode", "dialogs"],
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "name": "Workshop MK4",
+      "location": "Workshop",
+      "created": 1723661512,
+      "printer_type": "1.4.0",
+      "printer_type_name": "Original Prusa MK4",
+      "team_id": 1,
+      "team_name": "Team One",
+      "firmware": "6.5.7+12836",
+      "disabled": { "monitoring": true, "auto_printing": true, "auto_harvesting": true },
+      "filament": { "material": "PETG" },
+      "rights_r": true,
+      "rights_w": true,
+      "rights_u": true
+    },
+    {
+      "printer_model": "XL2IS",
+      "supported_printer_models": ["XL", "XL2", "XLIS"],
+      "printer_type_compatible": ["XL2IS", "XL", "XL2", "XLIS"],
+      "printer_state": "FINISHED",
+      "last_online": 1786862284.0081782,
+      "dialog_info": {
+        "id": 3586002496,
+        "code": "17324",
+        "text": "Display issues detected. Reducing the refresh rate will possibly solve the problem. Proceed?",
+        "title": "DISPLAY PROBLEM DETECTED",
+        "buttons": ["Yes", "No"],
+        "key": "DISPLAY_PROBLEM_DETECTED"
+      },
+      "temp": { "temp_nozzle": 19.0, "temp_bed": 18.3, "target_nozzle": 0.0, "target_bed": 0.0 },
+      "axis_z": 129.34,
+      "speed": 100,
+      "nozzle_diameter": 0.4,
+      "enclosure": { "present": false },
+      "tools": {
+        "1": { "temp": 19.0, "fan_hotend": 0.0, "fan_print": 0.0, "nozzle_diameter": 0.4, "material": "PLA", "high_flow": false, "hardened": true },
+        "2": { "temp": 19.0, "fan_hotend": 0.0, "fan_print": 0.0, "nozzle_diameter": 0.4, "material": "PLA", "high_flow": false, "hardened": true }
+      },
+      "connect_state": "FINISHED",
+      "allowed_functionalities": ["files", "filament", "queue", "bgcode", "dialogs", "tool_mapping"],
+      "uuid": "00000000-0000-4000-8000-000000000002",
+      "name": "Studio XL",
+      "location": "Studio",
+      "created": 1740434606,
+      "printer_type": "3.1.0",
+      "printer_type_name": "Original Prusa XL",
+      "team_id": 2,
+      "team_name": "Team Two",
+      "firmware": "6.2.6+8948",
+      "disabled": { "monitoring": true, "auto_printing": true, "auto_harvesting": true },
+      "rights_r": true,
+      "rights_w": true,
+      "rights_u": true
+    },
+    {
+      "printer_model": "MK4IS",
+      "supported_printer_models": ["MK4", "MK3.9", "MK3", "MK3S"],
+      "printer_type_compatible": ["MK4IS", "MK4", "MK3.9", "MK3", "MK3S"],
+      "printer_state": "ATTENTION",
+      "last_online": 1740135076.0,
+      "nozzle_diameter": 0.4,
+      "enclosure": { "present": false },
+      "tools": {
+        "1": { "nozzle_diameter": 0.4, "material": "PLA", "high_flow": false, "hardened": false }
+      },
+      "connect_state": "OFFLINE",
+      "allowed_functionalities": ["files", "filament", "queue", "bgcode", "dialogs"],
+      "uuid": "00000000-0000-4000-8000-000000000003",
+      "name": "Spare MK4",
+      "location": "Storage",
+      "created": 1725447559,
+      "printer_type": "1.4.0",
+      "printer_type_name": "Original Prusa MK4",
+      "team_id": 2,
+      "team_name": "Team Two",
+      "firmware": "6.2.0+8816",
+      "disabled": { "monitoring": true, "auto_printing": true, "auto_harvesting": true },
+      "filament": { "material": "PLA" },
+      "rights_r": true,
+      "rights_w": true,
+      "rights_u": true
+    }
+  ],
+  "pager": {
+    "limit": 20,
+    "offset": 0,
+    "total": 3,
+    "sort_by": [{ "column": "name", "order": "+", "default": "+" }]
+  }
+}

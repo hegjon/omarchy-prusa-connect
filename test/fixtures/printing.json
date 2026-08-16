@@ -1,0 +1,37 @@
+{
+  "_comment": "Synthetic. No sample of a PRINTING printer has been captured from Prusa Connect yet, so the job_info key names here are the ones normalize.jq accepts, not names confirmed against the live API. Replace this file with a real capture when a print is running.",
+  "printers": [
+    {
+      "printer_model": "MK4IS",
+      "printer_state": "PRINTING",
+      "connect_state": "PRINTING",
+      "last_online": 1786862284.0,
+      "temp": { "temp_nozzle": 215.0, "temp_bed": 60.0, "target_nozzle": 215.0, "target_bed": 60.0 },
+      "axis_z": 4.2,
+      "speed": 100,
+      "nozzle_diameter": 0.4,
+      "job_info": {
+        "id": 4711,
+        "display_name": "benchy.bgcode",
+        "progress": 42.5,
+        "time_remaining": 4320,
+        "time_printing": 1800
+      },
+      "tools": {
+        "1": { "temp": 215.0, "fan_hotend": 100.0, "fan_print": 80.0, "nozzle_diameter": 0.4, "material": "PLA", "high_flow": false, "hardened": false }
+      },
+      "uuid": "00000000-0000-4000-8000-000000000004",
+      "name": "Busy MK4",
+      "location": "Workshop",
+      "printer_type_name": "Original Prusa MK4",
+      "team_id": 1,
+      "team_name": "Team One",
+      "firmware": "6.5.7+12836",
+      "filament": { "material": "PLA" },
+      "rights_r": true,
+      "rights_w": true,
+      "rights_u": true
+    }
+  ],
+  "pager": { "limit": 20, "offset": 0, "total": 1 }
+}

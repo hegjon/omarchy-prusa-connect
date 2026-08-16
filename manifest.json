@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.hegjon.prusa-connect",
+  "name": "Prusa Connect",
+  "version": "0.1.0",
+  "author": "Jonny Heggheim",
+  "license": "MIT",
+  "description": "Monitor your Prusa Connect printer fleet from the Omarchy bar: state, current job, progress and temperatures, with notifications on finish, attention and error.",
+  "homepage": "https://github.com/hegjon/omarchy-prusa-connect",
+  "repository": "https://github.com/hegjon/omarchy-prusa-connect",
+  "keywords": [
+    "prusa",
+    "prusa-connect",
+    "3d-printing",
+    "printer",
+    "monitoring"
+  ],
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "PrusaWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Prusa Connect",
+    "description": "Printer fleet state, job progress and temperatures from Prusa Connect",
+    "category": "Hardware",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "showBarSummary": true,
+      "hideIdlePrinters": false,
+      "refreshIntervalSec": 30,
+      "watch": true,
+      "watchIntervalSec": 300,
+      "notifyFinished": true,
+      "notifyAttention": true,
+      "notifyError": true,
+      "notifyCooldownMin": 10,
+      "celsius": true
+    },
+    "schema": [
+      {
+        "key": "showBarSummary",
+        "type": "boolean",
+        "label": "Show a fleet summary next to the bar icon",
+        "defaultValue": true
+      },
+      {
+        "key": "hideIdlePrinters",
+        "type": "boolean",
+        "label": "Hide idle and offline printers from the panel",
+        "defaultValue": false
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval while the panel is open (seconds)",
+        "min": 10,
+        "max": 300,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "watch",
+        "type": "boolean",
+        "label": "Keep polling in the background for the bar summary and notifications",
+        "defaultValue": true
+      },
+      {
+        "key": "watchIntervalSec",
+        "type": "integer",
+        "label": "Background poll interval (seconds)",
+        "min": 60,
+        "max": 3600,
+        "step": 30,
+        "defaultValue": 300
+      },
+      {
+        "key": "notifyFinished",
+        "type": "boolean",
+        "label": "Notify when a print finishes",
+        "defaultValue": true
+      },
+      {
+        "key": "notifyAttention",
+        "type": "boolean",
+        "label": "Notify when a printer needs attention",
+        "defaultValue": true
+      },
+      {
+        "key": "notifyError",
+        "type": "boolean",
+        "label": "Notify on printer errors",
+        "defaultValue": true
+      },
+      {
+        "key": "notifyCooldownMin",
+        "type": "integer",
+        "label": "Minimum minutes before re-notifying about the same printer",
+        "min": 1,
+        "max": 240,
+        "step": 1,
+        "defaultValue": 10
+      },
+      {
+        "key": "celsius",
+        "type": "boolean",
+        "label": "Show temperatures in Celsius instead of Fahrenheit",
+        "defaultValue": true
+      }
+    ]
+  }
+}
