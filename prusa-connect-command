@@ -49,31 +49,21 @@ esac
 
 prusa_ensure_access_token || prusa_fail
 
-response=$(
-  printf 'url = "%s/%s/command/%s"\nrequest = "PUT"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Length: 0"\nsilent\nshow-error\n' \
-    "$COMMAND_BASE" "$UUID" "$ACTION" "$PRUSA_ACCESS_TOKEN" |
-    curl --config - -m 30 -w '\n%{http_code}'
-)
+prusa_http "$(printf 'url = "%s/%s/command/%s"\nrequest = "PUT"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nheader = "Content-Length: 0"' \
+  "$COMMAND_BASE" "$UUID" "$ACTION" "$PRUSA_ACCESS_TOKEN")"
 unset PRUSA_ACCESS_TOKEN
 
-code=$(tail -n1 <<<"$response")
-payload=$(sed '$d' <<<"$response")
-unset response
+code="$PRUSA_HTTP_CODE"
+payload="$PRUSA_HTTP_BODY"
 
 case "$code" in
   200|201|202|204)
     jq -cn --arg a "$ACTION" '{ok: true, action: $a}'
     ;;
-  401|403)
-    # The cached token was rejected; drop it so the next call renews cleanly.
-    rm -f "$PRUSA_TOKEN_FILE"
-    die_needs_login "Prusa Connect rejected the session — run prusa-connect-login"
-    ;;
   404) die "Prusa Connect does not know that printer" ;;
   422) die "Prusa Connect refused the command for this printer's state" ;;
-  429) die "Prusa Connect is rate limiting — try again shortly" ;;
-  "")  die "Could not reach Prusa Connect" ;;
   *)
+    prusa_die_on_common_http_failure
     detail=$(jq -r '.message? // .detail? // empty' <<<"$payload" 2>/dev/null)
     if [[ -n $detail ]]; then
       die "Prusa Connect returned HTTP $code: $detail"

@@ -38,31 +38,15 @@ ACCESS_TOKEN="$PRUSA_ACCESS_TOKEN"
 # --- fetch, paging until the fleet is complete -------------------------------
 
 fetch_page() {
-  local offset="$1" response code
-  response=$(
-    printf 'url = "%s?limit=%s&offset=%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"\nsilent\nshow-error\n' \
-      "$PRINTERS_URL" "$PAGE_LIMIT" "$offset" "$ACCESS_TOKEN" |
-      curl --config - -m 30 -w '\n%{http_code}'
-  )
-  code=$(tail -n1 <<<"$response")
-  printf '%s' "$code" >"$PRUSA_CACHE_DIR/.last-code"
-  sed '$d' <<<"$response"
+  prusa_http "$(printf 'url = "%s?limit=%s&offset=%s"\nheader = "Authorization: Bearer %s"\nheader = "Accept: application/json"' \
+    "$PRINTERS_URL" "$PAGE_LIMIT" "$1" "$ACCESS_TOKEN")"
+  [[ $PRUSA_HTTP_CODE == 200 ]] && return 0
+  prusa_die_on_common_http_failure
+  die "Prusa Connect returned HTTP $PRUSA_HTTP_CODE"
 }
 
-raw=$(fetch_page 0)
-code=$(<"$PRUSA_CACHE_DIR/.last-code")
-rm -f "$PRUSA_CACHE_DIR/.last-code"
-
-case "$code" in
-  200) ;;
-  401|403)
-    # The cached token was rejected; drop it so the next run renews cleanly.
-    rm -f "$PRUSA_TOKEN_FILE"
-    die_needs_login "Prusa Connect rejected the session — run prusa-connect-login" ;;
-  429) die "Prusa Connect is rate limiting — try again shortly" ;;
-  "" ) die "Could not reach Prusa Connect" ;;
-  *)   die "Prusa Connect returned HTTP $code" ;;
-esac
+fetch_page 0
+raw="$PRUSA_HTTP_BODY"
 
 jq -e . >/dev/null 2>&1 <<<"$raw" || die "Prusa Connect returned a malformed response"
 
@@ -72,11 +56,11 @@ total=$(jq -r '.pager.total // (.printers | length)' <<<"$raw")
 if (( total > PAGE_LIMIT )); then
   offset=$PAGE_LIMIT
   while (( offset < total )); do
-    page=$(fetch_page "$offset")
-    rm -f "$PRUSA_CACHE_DIR/.last-code"
-    jq -e . >/dev/null 2>&1 <<<"$page" || break
+    fetch_page "$offset"
+    jq -e . >/dev/null 2>&1 <<<"$PRUSA_HTTP_BODY" || die "Prusa Connect returned a malformed response"
     raw=$(jq -s '.[0] * {printers: (.[0].printers + .[1].printers)}' \
-      <(printf '%s' "$raw") <(printf '%s' "$page")) || break
+      <(printf '%s' "$raw") <(printf '%s' "$PRUSA_HTTP_BODY")) ||
+      die "Could not combine the pages of the Prusa Connect response"
     (( offset += PAGE_LIMIT ))
   done
 fi

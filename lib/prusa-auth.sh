@@ -59,6 +59,33 @@ prusa_release_refresh_lock() {
 
 prusa_urlencode() { jq -rn --arg v "$1" '$v|@uri'; }
 
+# One HTTP request. Takes a curl config (one option per line, as `curl
+# --config` reads it) and sets PRUSA_HTTP_CODE and PRUSA_HTTP_BODY, so a caller
+# can act on the status without a subshell swallowing it. The config is handed
+# to curl on stdin, so a bearer token in it never appears in argv.
+#
+# Call it directly, not inside $(...): the whole point is that the results land
+# in the caller's shell.
+prusa_http() {
+  local response
+  response=$(printf '%s\nsilent\nshow-error\n' "$1" | curl --config - -m 30 -w '\n%{http_code}')
+  PRUSA_HTTP_CODE=$(tail -n1 <<<"$response")
+  PRUSA_HTTP_BODY=$(sed '$d' <<<"$response")
+}
+
+# The failure arms every Connect request shares. Anything unrecognised returns,
+# so the caller can add the arms that mean something for its own endpoint.
+prusa_die_on_common_http_failure() {
+  case "$PRUSA_HTTP_CODE" in
+    401|403)
+      # The cached token was rejected; drop it so the next run renews cleanly.
+      rm -f "$PRUSA_TOKEN_FILE"
+      die_needs_login "Prusa Connect rejected the session — run prusa-connect-login" ;;
+    429) die "Prusa Connect is rate limiting — try again shortly" ;;
+    "")  die "Could not reach Prusa Connect" ;;
+  esac
+}
+
 prusa_require_commands() {
   local cmd
   for cmd in curl jq secret-tool; do
@@ -134,15 +161,13 @@ prusa_refresh_access_token() {
   body="grant_type=refresh_token&client_id=$(prusa_urlencode "$PRUSA_CLIENT_ID")"
   body+="&refresh_token=$(prusa_urlencode "$refresh")"
 
-  response=$(
-    printf 'url = "%s"\nheader = "Content-Type: application/x-www-form-urlencoded"\ndata = "%s"\nsilent\nshow-error\n' \
-      "$PRUSA_TOKEN_URL" "$body" | curl --config - -m 30 -w '\n%{http_code}'
-  )
+  prusa_http "$(printf 'url = "%s"\nheader = "Content-Type: application/x-www-form-urlencoded"\ndata = "%s"' \
+    "$PRUSA_TOKEN_URL" "$body")"
   unset body refresh
 
-  code=$(tail -n1 <<<"$response")
-  payload=$(sed '$d' <<<"$response")
-  unset response
+  code="$PRUSA_HTTP_CODE"
+  payload="$PRUSA_HTTP_BODY"
+  unset PRUSA_HTTP_BODY
 
   if [[ $code != 200 ]]; then
     case "$(jq -r '.error // empty' <<<"$payload" 2>/dev/null)" in
