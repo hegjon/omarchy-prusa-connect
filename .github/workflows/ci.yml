@@ -1,0 +1,79 @@
+name: CI
+
+# Everything here is hermetic: no credentials, no network, no Prusa account.
+# The fixtures under test/fixtures/ stand in for live API responses.
+#
+# The QML is deliberately not linted here. test/lint needs qmllint plus the
+# Omarchy shell's own modules, which Quickshell aliases to the `qs.*` namespace
+# at runtime; without them qmllint fails at the imports and reports nothing
+# useful. QML checking stays local — run ./test/lint on an Omarchy machine.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate manifest
+        run: ./test/test-manifest
+
+      - name: Check Bash syntax
+        run: |
+          bash -n prusa-connect-fetch
+          bash -n tools/fetch-printer-assets
+          bash -n test/test-normalize
+          bash -n test/test-manifest
+          bash -n test/lint
+
+      - name: ShellCheck
+        run: |
+          shellcheck --severity=warning \
+            prusa-connect-fetch \
+            tools/fetch-printer-assets \
+            test/test-normalize \
+            test/test-manifest \
+            test/lint
+
+      - name: Check Python syntax
+        run: python3 -m py_compile prusa-connect-login
+
+      - name: Test response normalization
+        run: ./test/test-normalize
+
+      - name: Check every printer illustration referenced is bundled
+        run: |
+          missing=0
+          for fixture in test/fixtures/*.json; do
+            while read -r key; do
+              [ -n "$key" ] || continue
+              if [ ! -f "assets/printers/$key.svg" ]; then
+                echo "::error file=$fixture::$key.svg is referenced but not bundled"
+                missing=1
+              fi
+            done < <(jq -f normalize.jq <"$fixture" | jq -r '.printers[].assetKey')
+          done
+          test -f assets/printers/unknown.svg || {
+            echo "::error::assets/printers/unknown.svg is missing, so unknown models cannot fall back"
+            missing=1
+          }
+          exit "$missing"
