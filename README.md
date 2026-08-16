@@ -4,6 +4,9 @@ Monitor your Prusa Connect printer fleet from the Omarchy bar: printer state,
 current job and progress, temperatures, and the reason a printer wants
 attention. Monitoring only — this plugin never sends commands to a printer.
 
+![The panel listing four printers: one printing with progress and ETA, one
+finished with an unanswered dialog, and two offline](preview.png)
+
 Because it reads Prusa Connect rather than the printers directly, it sees every
 printer on your account, wherever they are, not just the ones on your network.
 
