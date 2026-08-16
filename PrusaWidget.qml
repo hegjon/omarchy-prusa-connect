@@ -611,22 +611,36 @@ Panel {
               }
             }
 
-            // Current job, when one is running.
-            Text {
+            // Current job, when one is running. Filename and ETA are separate
+            // items rather than one joined string: sliced names run to 40-odd
+            // characters, and as a single elided Text the ETA — the half worth
+            // reading — was the part that got cut.
+            Row {
               width: parent.width
-              elide: Text.ElideRight
+              spacing: Style.space(6)
               visible: printerEntry.modelData.job !== null && printerEntry.modelData.job !== undefined
-              text: {
-                if (!printerEntry.modelData.job) return ""
-                var parts = []
-                if (printerEntry.modelData.job.name) parts.push(printerEntry.modelData.job.name)
-                var remaining = root.formatDuration(printerEntry.modelData.job.remaining)
-                if (remaining !== "") parts.push("ETA " + remaining)
-                return parts.join("  ·  ")
+
+              Text {
+                width: Math.max(0, parent.width - etaText.implicitWidth
+                  - (etaText.text === "" ? 0 : Style.space(6)))
+                elide: Text.ElideRight
+                text: printerEntry.modelData.job ? (printerEntry.modelData.job.name || "") : ""
+                color: root.detailColor
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
               }
-              color: root.detailColor
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
+
+              Text {
+                id: etaText
+                text: {
+                  if (!printerEntry.modelData.job) return ""
+                  var remaining = root.formatDuration(printerEntry.modelData.job.remaining)
+                  return remaining === "" ? "" : "ETA " + remaining
+                }
+                color: root.detailColor
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
             }
 
             // Why the printer wants attention, straight from Connect's dialog.
