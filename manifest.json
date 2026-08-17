@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "hegjon.prusa-connect",
   "name": "Prusa Connect",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Jonny Heggheim",
   "license": "MIT",
   "description": "Monitor your Prusa Connect printer fleet from the Omarchy bar: state, current job, progress and temperatures, with notifications and a confirmed Set ready action on finished printers.",

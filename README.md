@@ -113,21 +113,33 @@ Prusa Connect in your browser also invalidates it.
 
 ## Configuration
 
-Settings appear in the Omarchy bar widget settings.
+Settings are keys on the widget's entry in `~/.config/omarchy/shell.json`,
+which the shell hot-reloads. Set them with `omarchy bar set`:
 
-| Setting | Default | Description |
+```bash
+omarchy bar set hegjon.prusa-connect printingIntervalSec 10
+omarchy bar set hegjon.prusa-connect hideIdlePrinters true
+```
+
+or edit the entry under `bar.layout` by hand:
+
+```json
+{ "id": "hegjon.prusa-connect", "printingIntervalSec": 10, "hideIdlePrinters": true }
+```
+
+| Key | Default | Description |
 | --- | --- | --- |
-| Show print progress on the bar icon | enabled | Replaces the icon with a percentage while one printer is running |
-| Hide idle and offline printers from the panel | disabled | Show only printers doing something |
-| Refresh interval while the panel is open | `30` s | From 10 to 300 |
-| Keep polling in the background | enabled | Needed for the bar summary and notifications |
-| Background poll interval | `60` s | From 60 to 3600. Used when nothing is printing |
-| Poll interval while printing | `5` s | From 2 to 120. Used whenever any printer is printing, panel open or not |
-| Notify when a print finishes | enabled | |
-| Notify when a printer needs attention | enabled | |
-| Notify on printer errors | enabled | |
-| Re-notify cooldown | `10` min | Minimum gap before the same printer notifies again |
-| Celsius | enabled | Off shows Fahrenheit |
+| `showBarSummary` | `true` | Replace the bar icon with a percentage while one printer is printing |
+| `hideIdlePrinters` | `false` | Show only printers doing something |
+| `refreshIntervalSec` | `30` | Refresh interval while the panel is open, 10 to 300 |
+| `watch` | `true` | Keep polling in the background; needed for the bar summary and notifications |
+| `watchIntervalSec` | `60` | Background poll interval when nothing is printing, 60 to 3600 |
+| `printingIntervalSec` | `5` | Poll interval while any printer is printing, panel open or not, 2 to 120 |
+| `notifyFinished` | `true` | Notify when a print finishes |
+| `notifyAttention` | `true` | Notify when a printer needs attention |
+| `notifyError` | `true` | Notify on printer errors |
+| `notifyCooldownMin` | `10` | Minimum minutes before the same printer notifies again, 1 to 240 |
+| `celsius` | `true` | `false` shows Fahrenheit |
 
 Polling adapts to what the fleet is doing. A running print is polled every
 `printingIntervalSec` (5 s by default) whether or not the panel is open, because
