@@ -8,8 +8,14 @@ Prusa Connect web application at https://connect.prusa3d.com. They are included
 here so the plugin can show a recognisable illustration of each printer model
 alongside its status.
 
-No licence grant for redistribution has been identified. This was checked rather
-than assumed, on 2026-08-16:
+Prusa Research gave permission, by email on 2026-08-17, to keep them in this
+repository. No conditions were attached. They remain Prusa's property and are
+not relicensed: this plugin's MIT licence does not extend to them, so anyone
+reusing them elsewhere should ask Prusa rather than rely on this notice.
+
+Before that permission was sought, the question of whether a licence grant
+already existed was checked rather than assumed, on 2026-08-16, and none was
+found:
 
   * The prusa3d GitHub organisation (80 public repositories) contains no
     repository publishing these per-model illustrations. The closest candidate,
@@ -22,18 +28,8 @@ than assumed, on 2026-08-16:
     or restrictions of any kind.
   * Prusa's Open Community License covers hardware CAD files, not artwork.
 
-So these files appear only in the closed-source Connect web application. They
-are bundled on the understanding that this is a small, non-commercial,
-interoperability-oriented use that depicts Prusa's own products in a tool for
-Prusa's own customers, and that it is the kind of thing a rights holder would
-ask to have removed rather than litigate.
-
-If Prusa Research would prefer they not be redistributed, remove this directory:
-the plugin falls back to generic status glyphs with no loss of function — see
-stateGlyph() in PrusaWidget.qml.
-
-Enquiries: info@prusa3d.com, the address given for media enquiries on Prusa's
-media assets page.
+Deleting this directory costs nothing but the illustrations: the plugin falls
+back to generic status glyphs — see stateGlyph() in PrusaWidget.qml.
 
 Trade marks, including the Prusa name and logo, belong to Prusa Research a.s.
 This plugin is not affiliated with, endorsed by, or supported by Prusa Research.

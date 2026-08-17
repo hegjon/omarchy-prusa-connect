@@ -8,11 +8,12 @@ Third-party content
 
 The printer illustrations in assets/printers/ are NOT covered by that licence.
 They are product illustrations belonging to Prusa Research a.s., taken from the
-Prusa Connect web application, and are included so the plugin can show a
-recognisable picture of each printer model.
+Prusa Connect web application, and are included with Prusa Research's
+permission (given by email, 2026-08-17) so the plugin can show a recognisable
+picture of each printer model.
 
-See assets/printers/NOTICE for their provenance, the basis on which they are
-included, and how to refresh them. Deleting that directory removes them with no
+See assets/printers/NOTICE for their provenance, the terms of that permission,
+and how to refresh them. Deleting that directory removes them with no
 loss of function: the panel falls back to generic status glyphs.
 
 Trade marks, including the Prusa name and logo, belong to Prusa Research a.s.
